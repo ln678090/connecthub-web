@@ -63,7 +63,7 @@ export default function AuthPage({}: AuthPageProps) {
         try {
             setServerError('');
             const resp = await authApi.register({
-                name: data.fullName, // Tuỳ cấu trúc API backend của bạn (name hay fullName)
+                fullName: data.fullName, // Tuỳ cấu trúc API backend của bạn (name hay fullName)
                 email: data.email,
                 password: data.password
             });
