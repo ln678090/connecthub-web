@@ -2,7 +2,7 @@ import {useEffect, useState} from "react";
 import logo from "@/assets/logo_ConnectHub.png";
 import {createPortal} from "react-dom";
 
-type LoginSuccessOverlayProps = {};
+
 interface Props {
     visible: boolean;
     onDone: () => void;

@@ -10,7 +10,7 @@ interface FriendStore {
     sendRequest: (userId: number) => Promise<void>;
 }
 
-export const useFriendStore = create<FriendStore>((set, get) => ({
+export const useFriendStore = create<FriendStore>((set) => ({
     suggestions: [],
     sentIds: new Set(),
     isLoading: false,

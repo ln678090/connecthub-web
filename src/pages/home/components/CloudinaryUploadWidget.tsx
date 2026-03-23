@@ -6,8 +6,8 @@ interface Props {
 }
 
 export default function CloudinaryUploadWidget({ onUploadSuccess }: Props) {
-    const cloudinaryRef = useRef<any>();
-    const widgetRef = useRef<any>();
+    const cloudinaryRef = useRef<any>(null);
+    const widgetRef = useRef<any>(null);
 
     useEffect(() => {
         if (!('cloudinary' in window)) return;

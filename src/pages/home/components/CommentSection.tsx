@@ -4,7 +4,7 @@ import commentApi, {type CommentResponse} from "../../../api/commentApi.ts";
 import {MessageCircle, Send, Trash2} from "lucide-react";
 import {useAuthStore} from "../../../store/useAuthStore.ts";
 
-type CommentSectionProps = {};
+
 
 interface CommentProps {
     postId: string;
@@ -36,7 +36,7 @@ export default function CommentSection({postId}: CommentProps) {
         if (!content.trim()) return;
 
         try {
-            const res = await commentApi.createComment(postId, {content, parentId: null});
+            const res = await commentApi.createComment(postId, {content, parentId: ''});
             // Thêm bình luận mới lên đầu danh sách
             setComments([res.data.data, ...comments]);
             setContent('');
