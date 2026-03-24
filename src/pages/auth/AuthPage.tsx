@@ -8,9 +8,7 @@ import {authApi} from "../../api/authApi.ts";
 import logo from "@/assets/logo_ConnectHub.png";
 import LoginSuccessOverlay from "../home/components/LoginSuccessOverlay.tsx";
 
-
 type AuthPageProps = {};
-
 
 const loginSchema = z.object({
     email: z.string().email({message: 'Email không hợp lệ'}),
@@ -31,18 +29,17 @@ export default function AuthPage({}: AuthPageProps) {
     const location = useLocation();
     const navigate = useNavigate();
     const setAuth = useAuthStore((state) => state.setAuth);
-// Xác định trạng thái ban đầu dựa vào URL nếu vào /register thì lật luôn qua phải
+
     const [isRegister, setIsRegister] = useState(location.pathname === '/register');
     const [serverError, setServerError] = useState('');
     const loginForm = useForm<LoginInputs>({resolver: zodResolver(loginSchema)});
     const registerForm = useForm<RegisterInputs>({resolver: zodResolver(registerSchema)});
-    // Xử lý nút gạt chuyển đổi
+
     const toggleMode = () => {
         setIsRegister(!isRegister);
         setServerError('');
         loginForm.reset();
         registerForm.reset();
-        // Thay đổi URL ngầm để người dùng dễ F5 hoặc Copy Link
         window.history.pushState({}, '', isRegister ? '/login' : '/register');
     };
     const [pendingToken, setPendingToken] = useState<string | null>(null);
@@ -51,24 +48,21 @@ export default function AuthPage({}: AuthPageProps) {
         try {
             setServerError('');
             const resp = await authApi.login({email: data.email, password: data.password});
-            // setAuth(resp.data.data.accessToken);
-            // window.location.href = '/';
             setPendingToken(resp.data.data.accessToken);
             setShowOverlay(true);
         } catch (error: any) {
             setServerError(error.response?.data?.message || 'Đăng nhập thất bại.');
         }
     };
+
     const onRegisterSubmit = async (data: RegisterInputs) => {
         try {
             setServerError('');
             const resp = await authApi.register({
-                fullName: data.fullName, // Tuỳ cấu trúc API backend của bạn (name hay fullName)
+                fullName: data.fullName,
                 email: data.email,
                 password: data.password
             });
-            // setAuth(resp.data.data.accessToken);
-            // window.location.href = '/';
             setPendingToken(resp.data.data.accessToken);
             setShowOverlay(true);
         } catch (error: any) {
@@ -86,36 +80,31 @@ export default function AuthPage({}: AuthPageProps) {
                 }}
             />
 
-          
             <div className="flex min-h-screen items-center justify-center bg-[#f3f4f6] p-4 font-sans text-gray-900">
-
-                {/*
-        Tăng max-width lên 1100px và chiều cao lên 650px để tạo không gian (white space)
-        giúp giao diện trông thoáng, sang trọng, không bị "bức bí"
-      */}
                 <div
-                    className="relative w-full max-w-[1100px] h-[650px] overflow-hidden rounded-[2.5rem] bg-white shadow-2xl">
+                    className="relative w-full max-w-[1100px] h-[650px] md:h-[650px] h-auto overflow-hidden rounded-[2.5rem] bg-white shadow-2xl py-8 md:py-0">
 
                     {/* ======================================= */}
-                    {/* PANNEL 1: FORM ĐĂNG KÝ (Trượt từ trái qua) */}
+                    {/* PANNEL 1: FORM ĐĂNG KÝ */}
                     {/* ======================================= */}
                     <div
-                        className={`absolute top-0 left-0 h-full w-1/2 p-16 transition-all duration-700 ease-in-out ${
-                            isRegister ? 'translate-x-full opacity-100 z-10' : 'translate-x-0 opacity-0 z-0'
+                        className={`absolute top-0 left-0 h-full w-full md:w-1/2 px-6 md:p-16 transition-all duration-700 ease-in-out bg-white ${
+                            isRegister
+                                ? 'translate-x-0 md:translate-x-full opacity-100 z-10'
+                                : '-translate-x-full md:translate-x-0 opacity-0 z-0'
                         }`}
                     >
                         <div className="flex h-full flex-col justify-center max-w-sm mx-auto">
-                            {/* Thêm Logo ở Form Đăng Ký */}
                             <div className="mb-6 flex justify-center">
                                 <img src={logo} alt="ConnectHub Logo"
-                                     className="h-31 w-auto object-contain mix-blend-multiply"/>
+                                     className="h-24 md:h-31 w-auto object-contain mix-blend-multiply"/>
                             </div>
 
-                            <h2 className="mb-2 text-center text-3xl font-extrabold text-gray-800">Tạo tài khoản</h2>
-                            <p className="mb-8 text-center text-sm text-gray-500">Tham gia ConnectHub ngay hôm nay.</p>
+                            <h2 className="mb-2 text-center text-2xl md:text-3xl font-extrabold text-gray-800">Tạo tài khoản</h2>
+                            <p className="mb-6 md:mb-8 text-center text-sm text-gray-500">Tham gia ConnectHub ngay hôm nay.</p>
 
                             <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
-                                  className="flex flex-col gap-5">
+                                  className="flex flex-col gap-4 md:gap-5">
                                 <div>
                                     <input
                                         {...registerForm.register('fullName')}
@@ -156,28 +145,37 @@ export default function AuthPage({}: AuthPageProps) {
                                     {registerForm.formState.isSubmitting ? 'ĐANG XỬ LÝ...' : 'ĐĂNG KÝ'}
                                 </button>
                             </form>
+
+                            {/* Nút chuyển đổi (CHỈ HIỆN TRÊN MOBILE) */}
+                            <div className="mt-6 text-center md:hidden">
+                                <p className="text-sm text-gray-600">
+                                    Đã có tài khoản?{' '}
+                                    <button onClick={toggleMode} className="font-bold text-[#2e62a0] hover:text-[#71bc59]">Đăng nhập</button>
+                                </p>
+                            </div>
                         </div>
                     </div>
 
                     {/* ======================================= */}
-                    {/* PANNEL 2: FORM ĐĂNG NHẬP (Mặc định ở bên trái) */}
+                    {/* PANNEL 2: FORM ĐĂNG NHẬP */}
                     {/* ======================================= */}
                     <div
-                        className={`absolute top-0 left-0 h-full w-1/2 p-16 transition-all duration-700 ease-in-out ${
-                            isRegister ? 'translate-x-[100%] opacity-0 z-0' : 'translate-x-0 opacity-100 z-10'
+                        className={`absolute top-0 left-0 h-full w-full md:w-1/2 px-6 md:p-16 transition-all duration-700 ease-in-out bg-white ${
+                            isRegister
+                                ? 'translate-x-full md:translate-x-[100%] opacity-0 z-0'
+                                : 'translate-x-0 opacity-100 z-10'
                         }`}
                     >
                         <div className="flex h-full flex-col justify-center max-w-sm mx-auto">
-                            {/* Thêm Logo ở Form Đăng Nhập */}
                             <div className="mb-6 flex justify-center">
                                 <img src={logo} alt="ConnectHub Logo"
-                                     className="h-31 w-auto object-contain mix-blend-multiply"/>
+                                     className="h-24 md:h-31 w-auto object-contain mix-blend-multiply"/>
                             </div>
 
-                            <h2 className="mb-2 text-center text-3xl font-extrabold text-gray-800">Mừng trở lại!</h2>
-                            <p className="mb-8 text-center text-sm text-gray-500">Đăng nhập để kết nối với bạn bè.</p>
+                            <h2 className="mb-2 text-center text-2xl md:text-3xl font-extrabold text-gray-800">Mừng trở lại!</h2>
+                            <p className="mb-6 md:mb-8 text-center text-sm text-gray-500">Đăng nhập để kết nối với bạn bè.</p>
 
-                            <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="flex flex-col gap-5">
+                            <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="flex flex-col gap-4 md:gap-5">
                                 <div>
                                     <input
                                         {...loginForm.register('email')}
@@ -214,28 +212,31 @@ export default function AuthPage({}: AuthPageProps) {
                                     {loginForm.formState.isSubmitting ? 'ĐANG ĐĂNG NHẬP...' : 'ĐĂNG NHẬP'}
                                 </button>
                             </form>
+
+                            {/* Nút chuyển đổi (CHỈ HIỆN TRÊN MOBILE) */}
+                            <div className="mt-6 text-center md:hidden">
+                                <p className="text-sm text-gray-600">
+                                    Người mới à?{' '}
+                                    <button onClick={toggleMode} className="font-bold text-[#71bc59] hover:text-[#2e62a0]">Tạo tài khoản</button>
+                                </p>
+                            </div>
                         </div>
                     </div>
 
                     {/* ======================================= */}
-                    {/* PANNEL 3: LỚP OVERLAY TRƯỢT */}
+                    {/* PANNEL 3: LỚP OVERLAY TRƯỢT (CHỈ HIỆN TRÊN PC/TABLET) */}
                     {/* ======================================= */}
                     <div
-                        className={`absolute top-0 left-1/2 h-full w-1/2 overflow-hidden transition-transform duration-700 ease-in-out z-50 ${
+                        className={`hidden md:block absolute top-0 left-1/2 h-full w-1/2 overflow-hidden transition-transform duration-700 ease-in-out z-50 ${
                             isRegister ? '-translate-x-full' : 'translate-x-0'
                         }`}
                     >
-                        {/*
-            Lớp nền Gradient: Thay vì màu Tím/Hồng lúc nãy, mình đã điều chỉnh
-            gradient theo tông màu chủ đạo của Logo (Xanh Dương #2e62a0 và Xanh Lá #71bc59)
-          */}
                         <div
                             className={`relative -left-full h-full w-[200%] bg-gradient-to-br from-[#2e62a0] to-[#71bc59] text-white transition-transform duration-700 ease-in-out ${
                                 isRegister ? 'translate-x-1/2' : 'translate-x-0'
                             }`}
                         >
-
-                            {/* Overlay Trái (hiện khi đang ở màn Đăng ký, mời Đăng nhập) */}
+                            {/* Overlay Trái */}
                             <div
                                 className={`absolute top-0 left-0 flex h-full w-1/2 flex-col items-center justify-center px-16 text-center transition-transform duration-700 ease-in-out ${
                                     isRegister ? 'translate-x-0' : '-translate-x-[20%]'
@@ -254,7 +255,7 @@ export default function AuthPage({}: AuthPageProps) {
                                 </button>
                             </div>
 
-                            {/* Overlay Phải (hiện khi đang ở màn Đăng nhập, mời Đăng ký) */}
+                            {/* Overlay Phải */}
                             <div
                                 className={`absolute top-0 right-0 flex h-full w-1/2 flex-col items-center justify-center px-16 text-center transition-transform duration-700 ease-in-out ${
                                     isRegister ? 'translate-x-[20%]' : 'translate-x-0'
@@ -272,7 +273,6 @@ export default function AuthPage({}: AuthPageProps) {
                                     Tạo tài khoản
                                 </button>
                             </div>
-
                         </div>
                     </div>
 
