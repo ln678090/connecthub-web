@@ -1,7 +1,7 @@
 ﻿==================================================
 REACT PROJECT CODE DUMP
 ROOT: D:\project\java6_new\ConnectHub\ConnectHubFE
-GENERATED: 2026-03-16 12:36:27
+GENERATED: 2026-03-30 09:14:20
 ==================================================
 
 ==================================================
@@ -79,6 +79,7 @@ FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\package-lock.json
         "@hookform/resolvers": "^5.2.2",
         "@tailwindcss/vite": "^4.2.1",
         "axios": "^1.13.6",
+        "jwt-decode": "^4.0.0",
         "lucide-react": "^0.577.0",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
@@ -3312,6 +3313,15 @@ FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\package-lock.json
         "node": ">=6"
       }
     },
+    "node_modules/jwt-decode": {
+      "version": "4.0.0",
+      "resolved": "https://registry.npmjs.org/jwt-decode/-/jwt-decode-4.0.0.tgz",
+      "integrity": "sha512-+KJGIyHgkGuIq3IEBNftfhW/LfWhXUIY6OmyVWjliu5KH1y0fw7VQ8YndE2O4qZdMSd9SqbnC8GOcZEy0Om7sA==",
+      "license": "MIT",
+      "engines": {
+        "node": ">=18"
+      }
+    },
     "node_modules/keyv": {
       "version": "4.5.4",
       "resolved": "https://registry.npmjs.org/keyv/-/keyv-4.5.4.tgz",
@@ -4431,6 +4441,7 @@ FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\package.json
     "@hookform/resolvers": "^5.2.2",
     "@tailwindcss/vite": "^4.2.1",
     "axios": "^1.13.6",
+    "jwt-decode": "^4.0.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -4616,6 +4627,15 @@ FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\tsconfig.node.json
 
 
 ==================================================
+FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\vercel.json
+==================================================
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+
+
+
+==================================================
 FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\vite.config.ts
 ==================================================
 import {defineConfig} from 'vite'
@@ -4647,6 +4667,12 @@ export default defineConfig({
   }
 })
 
+
+
+==================================================
+FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\connecthub-web\README.md
+==================================================
+# connecthub-web
 
 
 ==================================================
@@ -4870,7 +4896,7 @@ export interface LoginPayload {
 }
 
 export interface RegisterPayload {
-    name: string;
+    fullName: string;
     email: string;
     password: string;
 }
@@ -4901,9 +4927,7 @@ export const authApi = {
         return authClient.post('/api/auth/logout');
     },
 
-    getMe: () => {
-        return authClient.get('/api/auth/me');
-    },
+
 };
 
 
@@ -5005,6 +5029,52 @@ export default axiosClient;
 
 
 ==================================================
+FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\api\commentApi.ts
+==================================================
+import axiosClient from "./axiosClient.ts";
+
+
+export interface AuthorDto {
+    id:string;
+    fullName: string;
+    avatarUrl?: string;
+}
+
+export interface CommentResponse {
+    id:string;
+    postId:string;
+    parentId?:string;
+    content:string;
+    author:AuthorDto;
+    createdAt: string;
+    replyCount: number;
+}
+
+export interface CommentRequest{
+    content:string;
+    parentId:string;
+}
+const commentApi={
+    // Láº¥y bÃ¬nh luáº­n gá»‘c cá»§a bÃ i viáº¿t
+    getTopLevelComments: (postId: string, page = 0, size = 5) =>
+        axiosClient.get(`/api/posts/${postId}/comments?page=${page}&size=${size}`),
+
+    // Láº¥y cÃ¡c cÃ¢u tráº£ lá»i (replies) cá»§a má»™t bÃ¬nh luáº­n
+    getReplies: (parentId: string, page = 0, size = 5) =>
+        axiosClient.get(`/api/posts/comments/${parentId}/replies?page=${page}&size=${size}`),
+
+    // Táº¡o bÃ¬nh luáº­n má»›i (gá»‘c hoáº·c tráº£ lá»i)
+    createComment: (postId: string, data: CommentRequest) =>
+        axiosClient.post(`/api/posts/${postId}/comments`, data),
+
+    // XÃ³a bÃ¬nh luáº­n
+    deleteComment: (commentId: string) =>
+        axiosClient.delete(`/api/posts/comments/${commentId}`),
+}
+export default commentApi;
+
+
+==================================================
 FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\api\friendApi.ts
 ==================================================
 import axiosClient from "./axiosClient.ts";
@@ -5034,7 +5104,8 @@ import axiosClient from "./axiosClient.ts";
 
 
 export interface PostDTO {
-    id: number;
+    id: string;
+    authorId: string;
     authorName: string;
     authorAvatar: string;
     createdAt: string;
@@ -5050,17 +5121,79 @@ export interface PageResponse<T> {
     last: boolean;
     totalElements: number;
 }
-export const postApi = {
-    getFeed: (page = 0, size = 5) =>
-        axiosClient.get<{ data: PageResponse<PostDTO> }>(`/api/posts?page=${page}&size=${size}`),
+// Cáº¥u trÃºc má»›i tá»« Backend tráº£ vá»
+export interface CursorPageResponse<T> {
+    posts: T[];
+    nextCursor: string;
+    hasNext: boolean;
+}
 
+export const postApi = {
+
+    getFeed: (cursorData: any = "", size = 5) => {
+             const params = new URLSearchParams();
+        params.append("size", size.toString());
+
+        if (cursorData && typeof cursorData === 'object') {
+            if (cursorData.createdAt) params.append("createdAt", cursorData.createdAt);
+            if (cursorData.id) params.append("id", cursorData.id);
+        }
+
+        return axiosClient.get<{ data: CursorPageResponse<PostDTO> }>(`/api/feed?${params.toString()}`);
+    },
+    getUserPosts: (userId: string, cursorData: any = "", size = 5) => {
+        const params = new URLSearchParams();
+        params.append("size", size.toString());
+
+        if (cursorData && typeof cursorData === 'object') {
+            if (cursorData.createdAt) params.append("createdAt", cursorData.createdAt);
+            if (cursorData.id) params.append("id", cursorData.id);
+        }
+
+
+        return axiosClient.get<{ data: CursorPageResponse<PostDTO> }>(`/api/posts/users/${userId}?${params.toString()}`);
+    },
     createPost: (data: { content: string; imageUrl?: string }) =>
         axiosClient.post<{ data: PostDTO }>('/api/posts', data),
 
-    toggleLike: (postId: number) =>
+    toggleLike: (postId: string) =>
         axiosClient.post(`/api/posts/${postId}/like`),
+
+    deletePost: (postId: string) =>
+        axiosClient.delete(`/api/posts/${postId}`),
 };
 
+
+==================================================
+FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\api\userApi.ts
+==================================================
+import axiosClient from "./axiosClient.ts";
+
+interface ApiResp{
+    message: string;
+    data: UserResp;
+    timestamp: string;
+}
+interface UserResp{
+    fullName:string;
+    bio:string;
+    location:string;
+    websiteUrl:string;
+    avatarUrl :string;
+    coverUrl :string;
+}
+export const userApi = {
+
+    getProfile: ( id: string) => axiosClient.get<ApiResp>(`/api/users/profile/${id}`),
+
+
+    updateAvatar: (avatarUrl: string) => axiosClient.put('/api/users/profile/avatar', { avatarUrl }),
+    updateCover: (coverUrl: string) => axiosClient.put('/api/users/profile/cover', { coverUrl }),
+
+
+    updateProfile: (data: { bio: string; location: string; websiteUrl: string; fullName: string }) =>
+        axiosClient.put('/api/users/profile', data),
+}
 
 
 ==================================================
@@ -5207,77 +5340,73 @@ export default function Dashboard({}: DashboardProps) {
 ==================================================
 FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\pages\auth\AuthPage.tsx
 ==================================================
-import {useLocation, useNavigate} from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import * as z from 'zod';
-import {useAuthStore} from "../../store/useAuthStore.ts";
-import {useState} from "react";
-import {useForm} from "react-hook-form";
-import {zodResolver} from "@hookform/resolvers/zod";
-import {authApi} from "../../api/authApi.ts";
+import { useAuthStore } from "../../store/useAuthStore.ts";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { authApi } from "../../api/authApi.ts";
 import logo from "@/assets/logo_ConnectHub.png";
 import LoginSuccessOverlay from "../home/components/LoginSuccessOverlay.tsx";
 
-
 type AuthPageProps = {};
 
-
 const loginSchema = z.object({
-    email: z.string().email({message: 'Email khÃ´ng há»£p lá»‡'}),
-    password: z.string().min(6, {message: 'Máº­t kháº©u Ã­t nháº¥t 6 kÃ½ tá»±'})
+    email: z.string().email({ message: 'Email khÃ´ng há»£p lá»‡' }),
+    password: z.string().min(6, { message: 'Máº­t kháº©u Ã­t nháº¥t 6 kÃ½ tá»±' })
 });
 
 const registerSchema = z.object({
-    fullName: z.string().min(2, {message: 'TÃªn quÃ¡ ngáº¯n'}),
-    email: z.string().email({message: 'Email khÃ´ng há»£p lá»‡'}),
-    password: z.string().min(6, {message: 'Máº­t kháº©u Ã­t nháº¥t 6 kÃ½ tá»±'})
+    fullName: z.string().min(2, { message: 'TÃªn quÃ¡ ngáº¯n' }),
+    email: z.string().email({ message: 'Email khÃ´ng há»£p lá»‡' }),
+    password: z.string().min(6, { message: 'Máº­t kháº©u Ã­t nháº¥t 6 kÃ½ tá»±' })
 });
 
 type LoginInputs = z.infer<typeof loginSchema>;
 type RegisterInputs = z.infer<typeof registerSchema>;
 
-export default function AuthPage({}: AuthPageProps) {
+export default function AuthPage({ }: AuthPageProps) {
     const [showOverlay, setShowOverlay] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     const setAuth = useAuthStore((state) => state.setAuth);
-// XÃ¡c Ä‘á»‹nh tráº¡ng thÃ¡i ban Ä‘áº§u dá»±a vÃ o URL náº¿u vÃ o /register thÃ¬ láº­t luÃ´n qua pháº£i
+
+    // XÃ¡c Ä‘á»‹nh tráº¡ng thÃ¡i ban Ä‘áº§u
     const [isRegister, setIsRegister] = useState(location.pathname === '/register');
     const [serverError, setServerError] = useState('');
-    const loginForm = useForm<LoginInputs>({resolver: zodResolver(loginSchema)});
-    const registerForm = useForm<RegisterInputs>({resolver: zodResolver(registerSchema)});
-    // Xá»­ lÃ½ nÃºt gáº¡t chuyá»ƒn Ä‘á»•i
+    const loginForm = useForm<LoginInputs>({ resolver: zodResolver(loginSchema) });
+    const registerForm = useForm<RegisterInputs>({ resolver: zodResolver(registerSchema) });
+
+    const [pendingToken, setPendingToken] = useState<string | null>(null);
+
     const toggleMode = () => {
         setIsRegister(!isRegister);
         setServerError('');
         loginForm.reset();
         registerForm.reset();
-        // Thay Ä‘á»•i URL ngáº§m Ä‘á»ƒ ngÆ°á»i dÃ¹ng dá»… F5 hoáº·c Copy Link
-        window.history.pushState({}, '', isRegister ? '/login' : '/register');
+        window.history.pushState({}, '', !isRegister ? '/register' : '/login');
     };
-    const [pendingToken, setPendingToken] = useState<string | null>(null);
 
     const onLoginSubmit = async (data: LoginInputs) => {
         try {
             setServerError('');
-            const resp = await authApi.login({email: data.email, password: data.password});
-            // setAuth(resp.data.data.accessToken);
-            // window.location.href = '/';
+            const resp = await authApi.login({ email: data.email, password: data.password });
             setPendingToken(resp.data.data.accessToken);
             setShowOverlay(true);
         } catch (error: any) {
             setServerError(error.response?.data?.message || 'ÄÄƒng nháº­p tháº¥t báº¡i.');
         }
     };
+
     const onRegisterSubmit = async (data: RegisterInputs) => {
         try {
             setServerError('');
             const resp = await authApi.register({
-                name: data.fullName, // Tuá»³ cáº¥u trÃºc API backend cá»§a báº¡n (name hay fullName)
+                fullName: data.fullName,
                 email: data.email,
                 password: data.password
             });
-            // setAuth(resp.data.data.accessToken);
-            // window.location.href = '/';
             setPendingToken(resp.data.data.accessToken);
             setShowOverlay(true);
         } catch (error: any) {
@@ -5295,193 +5424,174 @@ export default function AuthPage({}: AuthPageProps) {
                 }}
             />
 
-          
             <div className="flex min-h-screen items-center justify-center bg-[#f3f4f6] p-4 font-sans text-gray-900">
-
                 {/*
-        TÄƒng max-width lÃªn 1100px vÃ  chiá»u cao lÃªn 650px Ä‘á»ƒ táº¡o khÃ´ng gian (white space)
-        giÃºp giao diá»‡n trÃ´ng thoÃ¡ng, sang trá»ng, khÃ´ng bá»‹ "bá»©c bÃ­"
-      */}
-                <div
-                    className="relative w-full max-w-[1100px] h-[650px] overflow-hidden rounded-[2.5rem] bg-white shadow-2xl">
+                  Sá»­a height thÃ nh min-h Ä‘á»ƒ giÃ£n ná»Ÿ trÃªn mobile náº¿u content quÃ¡ dÃ i.
+                  Sá»­a layout cho Responsive.
+                */}
+                <div className="relative w-full max-w-[1100px] min-h-[600px] md:h-[650px] overflow-hidden rounded-3xl md:rounded-[2.5rem] bg-white shadow-2xl flex flex-col md:block">
 
                     {/* ======================================= */}
-                    {/* PANNEL 1: FORM ÄÄ‚NG KÃ (TrÆ°á»£t tá»« trÃ¡i qua) */}
+                    {/* PANNEL 1: FORM ÄÄ‚NG KÃ */}
                     {/* ======================================= */}
                     <div
-                        className={`absolute top-0 left-0 h-full w-1/2 p-16 transition-all duration-700 ease-in-out ${
-                            isRegister ? 'translate-x-full opacity-100 z-10' : 'translate-x-0 opacity-0 z-0'
+                        className={`absolute top-0 left-0 w-full md:w-1/2 h-full flex flex-col justify-center p-8 md:p-16 transition-all duration-700 ease-in-out bg-white
+                        ${isRegister
+                            ? 'md:translate-x-full translate-x-0 opacity-100 z-10'
+                            : 'md:translate-x-0 -translate-x-full opacity-0 z-0 pointer-events-none'
                         }`}
                     >
-                        <div className="flex h-full flex-col justify-center max-w-sm mx-auto">
-                            {/* ThÃªm Logo á»Ÿ Form ÄÄƒng KÃ½ */}
+                        <div className="flex flex-col justify-center max-w-sm mx-auto w-full">
                             <div className="mb-6 flex justify-center">
-                                <img src={logo} alt="ConnectHub Logo"
-                                     className="h-31 w-auto object-contain mix-blend-multiply"/>
+                                <img src={logo} alt="ConnectHub Logo" className="h-20 md:h-31 w-auto object-contain mix-blend-multiply" />
                             </div>
 
-                            <h2 className="mb-2 text-center text-3xl font-extrabold text-gray-800">Táº¡o tÃ i khoáº£n</h2>
-                            <p className="mb-8 text-center text-sm text-gray-500">Tham gia ConnectHub ngay hÃ´m nay.</p>
+                            <h2 className="mb-2 text-center text-2xl md:text-3xl font-extrabold text-gray-800">Táº¡o tÃ i khoáº£n</h2>
+                            <p className="mb-6 md:mb-8 text-center text-sm text-gray-500">Tham gia ConnectHub ngay hÃ´m nay.</p>
 
-                            <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
-                                  className="flex flex-col gap-5">
+                            <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="flex flex-col gap-4 md:gap-5">
                                 <div>
                                     <input
                                         {...registerForm.register('fullName')}
                                         type="text" placeholder="Há» vÃ  TÃªn"
-                                        className="w-full rounded-xl bg-gray-100/80 px-5 py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
+                                        className="w-full rounded-xl bg-gray-100/80 px-4 md:px-5 py-3 md:py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
                                     />
-                                    {registerForm.formState.errors.fullName &&
-                                        <p className="mt-1 text-xs text-red-500">{registerForm.formState.errors.fullName.message}</p>}
+                                    {registerForm.formState.errors.fullName && <p className="mt-1 text-xs text-red-500">{registerForm.formState.errors.fullName.message}</p>}
                                 </div>
-
                                 <div>
                                     <input
                                         {...registerForm.register('email')}
                                         type="email" placeholder="Email cá»§a báº¡n"
-                                        className="w-full rounded-xl bg-gray-100/80 px-5 py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
+                                        className="w-full rounded-xl bg-gray-100/80 px-4 md:px-5 py-3 md:py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
                                     />
-                                    {registerForm.formState.errors.email &&
-                                        <p className="mt-1 text-xs text-red-500">{registerForm.formState.errors.email.message}</p>}
+                                    {registerForm.formState.errors.email && <p className="mt-1 text-xs text-red-500">{registerForm.formState.errors.email.message}</p>}
                                 </div>
-
                                 <div>
                                     <input
                                         {...registerForm.register('password')}
                                         type="password" placeholder="Máº­t kháº©u"
-                                        className="w-full rounded-xl bg-gray-100/80 px-5 py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
+                                        className="w-full rounded-xl bg-gray-100/80 px-4 md:px-5 py-3 md:py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
                                     />
-                                    {registerForm.formState.errors.password &&
-                                        <p className="mt-1 text-xs text-red-500">{registerForm.formState.errors.password.message}</p>}
+                                    {registerForm.formState.errors.password && <p className="mt-1 text-xs text-red-500">{registerForm.formState.errors.password.message}</p>}
                                 </div>
 
-                                {serverError && isRegister &&
-                                    <p className="text-center text-sm font-semibold text-red-500">{serverError}</p>}
+                                {serverError && isRegister && <p className="text-center text-sm font-semibold text-red-500">{serverError}</p>}
 
                                 <button
                                     disabled={registerForm.formState.isSubmitting}
-                                    className="mt-2 w-full rounded-xl bg-gradient-to-r from-[#2e62a0] to-[#71bc59] p-3.5 font-bold tracking-wide text-white transition hover:opacity-90 shadow-md hover:shadow-lg"
+                                    className="mt-2 w-full rounded-xl bg-gradient-to-r from-[#2e62a0] to-[#71bc59] p-3 md:p-3.5 font-bold tracking-wide text-white transition hover:opacity-90 shadow-md hover:shadow-lg"
                                 >
                                     {registerForm.formState.isSubmitting ? 'ÄANG Xá»¬ LÃ...' : 'ÄÄ‚NG KÃ'}
                                 </button>
                             </form>
+
+                            {/* NÃºt chuyá»ƒn Ä‘á»•i giao diá»‡n dÃ nh riÃªng cho Mobile */}
+                            <div className="mt-6 text-center md:hidden">
+                                <p className="text-sm text-gray-600">
+                                    ÄÃ£ cÃ³ tÃ i khoáº£n?{' '}
+                                    <button onClick={toggleMode} type="button" className="font-bold text-[#2e62a0] hover:text-[#71bc59]">ÄÄƒng nháº­p</button>
+                                </p>
+                            </div>
                         </div>
                     </div>
 
                     {/* ======================================= */}
-                    {/* PANNEL 2: FORM ÄÄ‚NG NHáº¬P (Máº·c Ä‘á»‹nh á»Ÿ bÃªn trÃ¡i) */}
+                    {/* PANNEL 2: FORM ÄÄ‚NG NHáº¬P */}
                     {/* ======================================= */}
                     <div
-                        className={`absolute top-0 left-0 h-full w-1/2 p-16 transition-all duration-700 ease-in-out ${
-                            isRegister ? 'translate-x-[100%] opacity-0 z-0' : 'translate-x-0 opacity-100 z-10'
+                        className={`absolute top-0 left-0 w-full md:w-1/2 h-full flex flex-col justify-center p-8 md:p-16 transition-all duration-700 ease-in-out bg-white
+                        ${isRegister
+                            ? 'md:translate-x-[100%] translate-x-full opacity-0 z-0 pointer-events-none'
+                            : 'translate-x-0 opacity-100 z-10'
                         }`}
                     >
-                        <div className="flex h-full flex-col justify-center max-w-sm mx-auto">
-                            {/* ThÃªm Logo á»Ÿ Form ÄÄƒng Nháº­p */}
+                        <div className="flex flex-col justify-center max-w-sm mx-auto w-full">
                             <div className="mb-6 flex justify-center">
-                                <img src={logo} alt="ConnectHub Logo"
-                                     className="h-31 w-auto object-contain mix-blend-multiply"/>
+                                <img src={logo} alt="ConnectHub Logo" className="h-20 md:h-31 w-auto object-contain mix-blend-multiply" />
                             </div>
 
-                            <h2 className="mb-2 text-center text-3xl font-extrabold text-gray-800">Má»«ng trá»Ÿ láº¡i!</h2>
-                            <p className="mb-8 text-center text-sm text-gray-500">ÄÄƒng nháº­p Ä‘á»ƒ káº¿t ná»‘i vá»›i báº¡n bÃ¨.</p>
+                            <h2 className="mb-2 text-center text-2xl md:text-3xl font-extrabold text-gray-800">Má»«ng trá»Ÿ láº¡i!</h2>
+                            <p className="mb-6 md:mb-8 text-center text-sm text-gray-500">ÄÄƒng nháº­p Ä‘á»ƒ káº¿t ná»‘i vá»›i báº¡n bÃ¨.</p>
 
-                            <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="flex flex-col gap-5">
+                            <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="flex flex-col gap-4 md:gap-5">
                                 <div>
                                     <input
                                         {...loginForm.register('email')}
                                         type="email" placeholder="Email cá»§a báº¡n"
-                                        className="w-full rounded-xl bg-gray-100/80 px-5 py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
+                                        className="w-full rounded-xl bg-gray-100/80 px-4 md:px-5 py-3 md:py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
                                     />
-                                    {loginForm.formState.errors.email &&
-                                        <p className="mt-1 text-xs text-red-500">{loginForm.formState.errors.email.message}</p>}
+                                    {loginForm.formState.errors.email && <p className="mt-1 text-xs text-red-500">{loginForm.formState.errors.email.message}</p>}
                                 </div>
-
                                 <div>
                                     <input
                                         {...loginForm.register('password')}
                                         type="password" placeholder="Máº­t kháº©u"
-                                        className="w-full rounded-xl bg-gray-100/80 px-5 py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
+                                        className="w-full rounded-xl bg-gray-100/80 px-4 md:px-5 py-3 md:py-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[#2e62a0]"
                                     />
-                                    {loginForm.formState.errors.password &&
-                                        <p className="mt-1 text-xs text-red-500">{loginForm.formState.errors.password.message}</p>}
+                                    {loginForm.formState.errors.password && <p className="mt-1 text-xs text-red-500">{loginForm.formState.errors.password.message}</p>}
                                 </div>
-
                                 <div className="text-right mt-1">
-                                    <a href="#"
-                                       className="text-sm font-semibold text-[#2e62a0] hover:text-[#71bc59] transition-colors">QuÃªn
-                                        máº­t kháº©u?</a>
+                                    <a href="#" className="text-sm font-semibold text-[#2e62a0] hover:text-[#71bc59] transition-colors">QuÃªn máº­t kháº©u?</a>
                                 </div>
 
-                                {serverError && !isRegister &&
-                                    <p className="text-center text-sm font-semibold text-red-500">{serverError}</p>}
+                                {serverError && !isRegister && <p className="text-center text-sm font-semibold text-red-500">{serverError}</p>}
 
                                 <button
                                     disabled={loginForm.formState.isSubmitting}
-                                    className="mt-2 w-full rounded-xl bg-gradient-to-r from-[#2e62a0] to-[#71bc59] p-3.5 font-bold tracking-wide text-white transition hover:opacity-90 shadow-md hover:shadow-lg"
+                                    className="mt-2 w-full rounded-xl bg-gradient-to-r from-[#2e62a0] to-[#71bc59] p-3 md:p-3.5 font-bold tracking-wide text-white transition hover:opacity-90 shadow-md hover:shadow-lg"
                                 >
                                     {loginForm.formState.isSubmitting ? 'ÄANG ÄÄ‚NG NHáº¬P...' : 'ÄÄ‚NG NHáº¬P'}
                                 </button>
                             </form>
+
+                            {/* NÃºt chuyá»ƒn Ä‘á»•i giao diá»‡n dÃ nh riÃªng cho Mobile */}
+                            <div className="mt-6 text-center md:hidden">
+                                <p className="text-sm text-gray-600">
+                                    NgÆ°á»i má»›i Ã ?{' '}
+                                    <button onClick={toggleMode} type="button" className="font-bold text-[#71bc59] hover:text-[#2e62a0]">Táº¡o tÃ i khoáº£n</button>
+                                </p>
+                            </div>
                         </div>
                     </div>
 
                     {/* ======================================= */}
-                    {/* PANNEL 3: Lá»šP OVERLAY TRÆ¯á»¢T */}
+                    {/* PANNEL 3: Lá»šP OVERLAY TRÆ¯á»¢T (CHá»ˆ HIá»†N TRÃŠN DESKTOP) */}
                     {/* ======================================= */}
                     <div
-                        className={`absolute top-0 left-1/2 h-full w-1/2 overflow-hidden transition-transform duration-700 ease-in-out z-50 ${
+                        className={`hidden md:block absolute top-0 left-1/2 h-full w-1/2 overflow-hidden transition-transform duration-700 ease-in-out z-50 ${
                             isRegister ? '-translate-x-full' : 'translate-x-0'
                         }`}
                     >
-                        {/*
-            Lá»›p ná»n Gradient: Thay vÃ¬ mÃ u TÃ­m/Há»“ng lÃºc nÃ£y, mÃ¬nh Ä‘Ã£ Ä‘iá»u chá»‰nh
-            gradient theo tÃ´ng mÃ u chá»§ Ä‘áº¡o cá»§a Logo (Xanh DÆ°Æ¡ng #2e62a0 vÃ  Xanh LÃ¡ #71bc59)
-          */}
                         <div
                             className={`relative -left-full h-full w-[200%] bg-gradient-to-br from-[#2e62a0] to-[#71bc59] text-white transition-transform duration-700 ease-in-out ${
                                 isRegister ? 'translate-x-1/2' : 'translate-x-0'
                             }`}
                         >
-
-                            {/* Overlay TrÃ¡i (hiá»‡n khi Ä‘ang á»Ÿ mÃ n ÄÄƒng kÃ½, má»i ÄÄƒng nháº­p) */}
-                            <div
-                                className={`absolute top-0 left-0 flex h-full w-1/2 flex-col items-center justify-center px-16 text-center transition-transform duration-700 ease-in-out ${
-                                    isRegister ? 'translate-x-0' : '-translate-x-[20%]'
-                                }`}
-                            >
-                                <h2 className="mb-6 text-4xl font-extrabold text-white drop-shadow-md tracking-tight">ÄÃ£
-                                    cÃ³ tÃ i khoáº£n?</h2>
+                            {/* Overlay TrÃ¡i */}
+                            <div className={`absolute top-0 left-0 flex h-full w-1/2 flex-col items-center justify-center px-16 text-center transition-transform duration-700 ease-in-out ${
+                                isRegister ? 'translate-x-0' : '-translate-x-[20%]'
+                            }`}>
+                                <h2 className="mb-6 text-4xl font-extrabold text-white drop-shadow-md tracking-tight">ÄÃ£ cÃ³ tÃ i khoáº£n?</h2>
                                 <p className="mb-10 text-lg text-white/90 leading-relaxed font-light">
                                     ÄÄƒng nháº­p ngay Ä‘á»ƒ tiáº¿p tá»¥c tráº£i nghiá»‡m vÃ  káº¿t ná»‘i vá»›i máº¡ng lÆ°á»›i cá»§a báº¡n!
                                 </p>
-                                <button
-                                    onClick={toggleMode}
-                                    className="rounded-full border-2 border-white/80 bg-white/10 backdrop-blur-sm px-12 py-3.5 font-bold uppercase tracking-wider text-white transition hover:bg-white hover:text-[#2e62a0] shadow-xl"
-                                >
+                                <button onClick={toggleMode} className="rounded-full border-2 border-white/80 bg-white/10 backdrop-blur-sm px-12 py-3.5 font-bold uppercase tracking-wider text-white transition hover:bg-white hover:text-[#2e62a0] shadow-xl">
                                     ÄÄƒng nháº­p
                                 </button>
                             </div>
 
-                            {/* Overlay Pháº£i (hiá»‡n khi Ä‘ang á»Ÿ mÃ n ÄÄƒng nháº­p, má»i ÄÄƒng kÃ½) */}
-                            <div
-                                className={`absolute top-0 right-0 flex h-full w-1/2 flex-col items-center justify-center px-16 text-center transition-transform duration-700 ease-in-out ${
-                                    isRegister ? 'translate-x-[20%]' : 'translate-x-0'
-                                }`}
-                            >
-                                <h2 className="mb-6 text-4xl font-extrabold text-white drop-shadow-md tracking-tight">NgÆ°á»i
-                                    má»›i Ã ?</h2>
+                            {/* Overlay Pháº£i */}
+                            <div className={`absolute top-0 right-0 flex h-full w-1/2 flex-col items-center justify-center px-16 text-center transition-transform duration-700 ease-in-out ${
+                                isRegister ? 'translate-x-[20%]' : 'translate-x-0'
+                            }`}>
+                                <h2 className="mb-6 text-4xl font-extrabold text-white drop-shadow-md tracking-tight">NgÆ°á»i má»›i Ã ?</h2>
                                 <p className="mb-10 text-lg text-white/90 leading-relaxed font-light">
                                     HÃ£y gia nháº­p cá»™ng Ä‘á»“ng cá»§a chÃºng tÃ´i vÃ  khÃ¡m phÃ¡ nhá»¯ng Ä‘iá»u tuyá»‡t vá»i nháº¥t!
                                 </p>
-                                <button
-                                    onClick={toggleMode}
-                                    className="rounded-full border-2 border-white/80 bg-white/10 backdrop-blur-sm px-12 py-3.5 font-bold uppercase tracking-wider text-white transition hover:bg-white hover:text-[#71bc59] shadow-xl"
-                                >
+                                <button onClick={toggleMode} className="rounded-full border-2 border-white/80 bg-white/10 backdrop-blur-sm px-12 py-3.5 font-bold uppercase tracking-wider text-white transition hover:bg-white hover:text-[#71bc59] shadow-xl">
                                     Táº¡o tÃ i khoáº£n
                                 </button>
                             </div>
-
                         </div>
                     </div>
 
@@ -5490,6 +5600,7 @@ export default function AuthPage({}: AuthPageProps) {
         </>
     );
 }
+
 
 
 ==================================================
@@ -5504,7 +5615,7 @@ import CreatePost from './components/CreatePost';
 import RightSidebar from './components/RightSidebar';
 import {usePostStore} from '../../store/usePostStore';
 
-// Skeleton UI giá»¯ nguyÃªn...
+
 function PostSkeleton() {
     return (
         <div className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100 animate-pulse">
@@ -5534,6 +5645,8 @@ export default function HomePage() {
     const loadMore = usePostStore(s => s.loadMore);
 
     const sentinelRef = useRef<HTMLDivElement>(null);
+    const toggleLike = usePostStore(s => s.toggleLike);
+    const deletePost = usePostStore(s => s.deletePost);
 
     useEffect(() => {
         fetchPosts();
@@ -5568,9 +5681,15 @@ export default function HomePage() {
                     {isLoading ? (
                         [1, 2, 3].map((i) => <PostSkeleton key={i} />)
                     ) : (
-                        posts.map((post) => <PostCard key={post.id} postData={post} />)
+                        posts.map((post, index) => (
+                            <PostCard
+                                key={`${post.id}-${index}`}
+                                postData={post}
+                                onLike={toggleLike}
+                                onDelete={deletePost}
+                            />
+                        ))
                     )}
-
                     <div ref={sentinelRef} className="h-4"></div>
 
                     {isLoadingMore && (
@@ -5604,11 +5723,13 @@ import {Image as ImageIcon, Video as VideoIcon} from "lucide-react";
 
 interface Props {
     onUploadSuccess: (url: string, fileType: 'image' | 'video') => void;
+    children?: React.ReactNode;
+    className?: string;
 }
 
-export default function CloudinaryUploadWidget({ onUploadSuccess }: Props) {
-    const cloudinaryRef = useRef<any>();
-    const widgetRef = useRef<any>();
+export default function CloudinaryUploadWidget({ onUploadSuccess,children,className }: Props) {
+    const cloudinaryRef = useRef<any>(null);
+    const widgetRef = useRef<any>(null);
 
     useEffect(() => {
         if (!('cloudinary' in window)) return;
@@ -5656,15 +5777,258 @@ export default function CloudinaryUploadWidget({ onUploadSuccess }: Props) {
                 e.preventDefault();
                 if (widgetRef.current) widgetRef.current.open();
             }}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50 transition-all hover:bg-blue-50 hover:text-[#2e62a0] border border-gray-100"
+            className={className || "flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50 transition-all hover:bg-blue-50 hover:text-[#2e62a0] border border-gray-100"}
         >
-            <ImageIcon size={16} className="text-[#71bc59]" />
-            <VideoIcon size={16} className="text-rose-500" />
-            áº¢nh/Video
+            {children ? children : (
+                <>
+                    <ImageIcon size={16} className="text-[#71bc59]" />
+                    <VideoIcon size={16} className="text-rose-500" />
+                    áº¢nh/Video
+                </>
+            )}
         </button>
     );
 }
 
+
+
+==================================================
+FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\pages\home\components\CommentSection.tsx
+==================================================
+import {useEffect, useState} from "react";
+import {useToastStore} from "../../../store/useToastStore.ts";
+import commentApi, {type CommentResponse} from "../../../api/commentApi.ts";
+import {MessageCircle, Send, Trash2} from "lucide-react";
+import {useAuthStore} from "../../../store/useAuthStore.ts";
+
+
+
+interface CommentProps {
+    postId: string;
+}
+
+export default function CommentSection({postId}: CommentProps) {
+    const [comments, setComments] = useState<CommentResponse[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [content, setContent] = useState('');
+    const showToast = useToastStore((s) => s.show);
+    useEffect(() => {
+        fetchComments();
+    }, [postId]);
+
+    const fetchComments = async () => {
+        setLoading(true);
+        try {
+            const res = await commentApi.getTopLevelComments(postId, 0, 10);
+            // Data tráº£ vá» tá»« PageImpl cá»§a Spring Data
+            setComments(res.data.data.content);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+    const handlePostComment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!content.trim()) return;
+
+        try {
+            const res = await commentApi.createComment(postId, {content, parentId: ''});
+            // ThÃªm bÃ¬nh luáº­n má»›i lÃªn Ä‘áº§u danh sÃ¡ch
+            setComments([res.data.data, ...comments]);
+            setContent('');
+        } catch (err) {
+            showToast("Lá»—i khi gá»­i bÃ¬nh luáº­n", "error");
+        }
+    };
+
+    const handleDelete = async (commentId: string) => {
+        if (!confirm("Báº¡n cÃ³ cháº¯c muá»‘n xÃ³a bÃ¬nh luáº­n nÃ y?")) return;
+        try {
+            await commentApi.deleteComment(commentId);
+            setComments((prev) => prev.filter((c) => c.id !== commentId));
+            showToast("ÄÃ£ xÃ³a bÃ¬nh luáº­n", "success");
+        } catch (err) {
+            showToast("KhÃ´ng cÃ³ quyá»n xÃ³a hoáº·c lá»—i Server", "error");
+        }
+    };
+    return (
+        <div className="mt-4 border-t border-gray-100 pt-4">
+            {/* Form nháº­p bÃ¬nh luáº­n gá»‘c */}
+            <form onSubmit={handlePostComment} className="flex gap-2 mb-6">
+                <input
+                    type="text"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Viáº¿t bÃ¬nh luáº­n..."
+                    className="flex-1 rounded-full bg-gray-100 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2e62a0]/50"
+                />
+                <button
+                    type="submit"
+                    disabled={!content.trim()}
+                    className="rounded-full bg-[#2e62a0] p-2 text-white disabled:opacity-50 transition hover:bg-[#1a4f8a]"
+                >
+                    <Send size={18}/>
+                </button>
+            </form>
+
+            {/* Danh sÃ¡ch bÃ¬nh luáº­n */}
+            {loading ? (
+                <div className="text-center text-sm text-gray-400">Äang táº£i...</div>
+            ) : (
+                <div className="flex flex-col gap-4">
+                    {comments.map((comment, index) => (
+                        <CommentItem
+                            key={`comment-${comment.id}-${index}`}
+                            comment={comment}
+                            postId={postId}
+                            onDelete={handleDelete}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Component Ä‘á»‡ quy cho tá»«ng Item
+function CommentItem({comment, postId, onDelete}: {
+    comment: CommentResponse;
+    postId: string;
+    onDelete: (id: string) => void;
+}) {
+    const [replies, setReplies] = useState<CommentResponse[]>([]);
+    const [showReplyForm, setShowReplyForm] = useState(false);
+    const [showReplies, setShowReplies] = useState(false);
+    const [replyContent, setReplyContent] = useState('');
+
+    // DÃ¹ng Ä‘á»ƒ láº¥y userId tá»« JWT Token trong Zustand (kiá»ƒm tra quyá»n XÃ³a)
+    const currentUserId = useAuthStore((s) => s.user?.id); // Giáº£ sá»­ báº¡n cÃ³ lÆ°u user info
+
+    const handleFetchReplies = async () => {
+        if (showReplies) {
+            setShowReplies(false);
+            return;
+        }
+        try {
+            const res = await commentApi.getReplies(comment.id, 0, 50);
+            setReplies(res.data.data.content);
+            setShowReplies(true);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handlePostReply = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!replyContent.trim()) return;
+
+        try {
+            const res = await commentApi.createComment(postId, {
+                content: replyContent,
+                parentId: comment.id
+            });
+            setReplies([...replies, res.data.data]);
+            setReplyContent('');
+            setShowReplyForm(false);
+            setShowReplies(true);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleReplyDelete = async (replyId: string) => {
+        if (!confirm("Báº¡n cÃ³ cháº¯c muá»‘n xÃ³a pháº£n há»“i nÃ y?")) return;
+        try {
+            await commentApi.deleteComment(replyId);
+            setReplies((prev) => prev.filter((r) => r.id !== replyId));
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    return (
+        <div className="flex gap-3">
+            <img src={comment.author.avatarUrl || "https://media.istockphoto.com/id/1196083861/vi/vec-to/b%E1%BB%99-bi%E1%BB%83u-t%C6%B0%E1%BB%A3ng-%C4%91%E1%BA%A7u-ng%C6%B0%E1%BB%9Di-%C4%91%C3%A0n-%C3%B4ng-%C4%91%C6%A1n-gi%E1%BA%A3n.jpg?s=612x612&w=0&k=20&c=7juGotIovn0c2KFGhZ_DcEqpfiSyYl-zz2ty9XYnYNs="} alt=""
+                 className="h-8 w-8 rounded-full object-cover"/>
+            <div className="flex-1">
+                {/* Bong bÃ³ng bÃ¬nh luáº­n */}
+                <div className="relative group rounded-2xl bg-gray-100 px-4 py-2 w-max max-w-full">
+                    <p className="text-sm font-semibold text-gray-800">{comment.author.fullName}</p>
+                    <p className="text-sm text-gray-700">{comment.content}</p>
+
+                    {/* NÃºt xÃ³a (chá»‰ hiá»‡n khi lÃ  chá»§ comment) */}
+                    {(currentUserId === comment.author.id) && (
+                        <button
+                            onClick={() => onDelete(comment.id)}
+                            className="absolute -right-8 top-2 hidden group-hover:block p-1 text-red-500 hover:bg-red-50 rounded-full"
+                        >
+                            <Trash2 size={14}/>
+                        </button>
+                    )}
+                </div>
+
+                {/* HÃ nh Ä‘á»™ng dÆ°á»›i bÃ¬nh luáº­n */}
+                <div className="mt-1 flex items-center gap-4 px-2 text-xs font-medium text-gray-500">
+                    <button onClick={() => setShowReplyForm(!showReplyForm)}
+                            className="hover:text-gray-800 transition">Pháº£n há»“i
+                    </button>
+                    <span>{new Date(comment.createdAt).toLocaleDateString('vi-VN')}</span>
+                </div>
+
+                {/* Form nháº­p tráº£ lá»i */}
+                {showReplyForm && (
+                    <form onSubmit={handlePostReply} className="mt-2 flex gap-2">
+                        <input
+                            autoFocus
+                            type="text"
+                            value={replyContent}
+                            onChange={(e) => setReplyContent(e.target.value)}
+                            placeholder={`Tráº£ lá»i ${comment.author.fullName}...`}
+                            className="flex-1 rounded-full bg-gray-50 border border-gray-200 px-3 py-1.5 text-xs focus:outline-none"
+                        />
+                        <button type="submit" disabled={!replyContent.trim()}
+                                className="text-[#2e62a0] disabled:opacity-50">Gá»­i
+                        </button>
+                    </form>
+                )}
+
+                {/* NÃºt Xem cÃ¢u tráº£ lá»i */}
+                {comment.replyCount > 0 && !showReplies && (
+                    <button onClick={handleFetchReplies}
+                            className="mt-2 flex items-center gap-1 text-xs font-semibold text-[#2e62a0]">
+                        <MessageCircle size={14}/> Xem {comment.replyCount} cÃ¢u tráº£ lá»i
+                    </button>
+                )}
+
+                {/* Render danh sÃ¡ch replies */}
+                {showReplies && (
+                    <div className="mt-3 flex flex-col gap-3">
+                        {replies.map((reply) => (
+                            <div key={reply.id} className="flex gap-2">
+                                <img src={reply.author.avatarUrl || "https://media.istockphoto.com/id/1196083861/vi/vec-to/b%E1%BB%99-bi%E1%BB%83u-t%C6%B0%E1%BB%A3ng-%C4%91%E1%BA%A7u-ng%C6%B0%E1%BB%9Di-%C4%91%C3%A0n-%C3%B4ng-%C4%91%C6%A1n-gi%E1%BA%A3n.jpg?s=612x612&w=0&k=20&c=7juGotIovn0c2KFGhZ_DcEqpfiSyYl-zz2ty9XYnYNs="}
+                                     className="h-6 w-6 rounded-full"/>
+                                <div>
+                                    <div
+                                        className="relative group rounded-2xl bg-gray-100 px-3 py-1.5 w-max max-w-full">
+                                        <p className="text-xs font-semibold text-gray-800">{reply.author.fullName}</p>
+                                        <p className="text-xs text-gray-700">{reply.content}</p>
+                                        {(currentUserId === reply.author.id) && (
+                                            <button onClick={() => handleReplyDelete(reply.id)}
+                                                    className="absolute -right-8 top-1 hidden group-hover:block p-1 text-red-500">
+                                                <Trash2 size={12}/>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 
 ==================================================
@@ -5932,7 +6296,7 @@ import {useEffect, useState} from "react";
 import logo from "@/assets/logo_ConnectHub.png";
 import {createPortal} from "react-dom";
 
-type LoginSuccessOverlayProps = {};
+
 interface Props {
     visible: boolean;
     onDone: () => void;
@@ -6019,26 +6383,47 @@ export default function LoginSuccessOverlay({ visible, onDone }: Props) {
 ==================================================
 FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\pages\home\components\PostCard.tsx
 ==================================================
-import React, {useState} from 'react';
-import {Download, MessageCircle, MoreHorizontal, Share2, ThumbsUp, X} from 'lucide-react';
-import {usePostStore} from '../../../store/usePostStore';
-import {useToastStore} from '../../../store/useToastStore';
-import type {PostDTO} from '../../../api/postApi';
+import React, { useState } from 'react';
+import { Download, MessageCircle, MoreHorizontal, Share2, ThumbsUp, Trash2, X } from 'lucide-react';
+import { useToastStore } from '../../../store/useToastStore';
+import type { PostDTO } from '../../../api/postApi';
+import { useAuthStore } from "../../../store/useAuthStore.ts";
+import CommentSection from './CommentSection';
+import { Link } from "react-router-dom";
 
-export type Post = PostDTO;
+interface PostCardProps {
+    postData: PostDTO;
+    onLike: (postId: string) => void;
+    onDelete: (postId: string) => void;
+}
 
-const PostCard = React.memo(({ postData }: { postData: PostDTO }) => {
-    const toggleLike = usePostStore((s) => s.toggleLike);
-    const showToast = useToastStore((s) => s.show);
-
-    // State quáº£n lÃ½ viá»‡c má»Ÿ/Ä‘Ã³ng Modal xem áº£nh
+const PostCard = React.memo(({ postData, onLike, onDelete }: PostCardProps) => {
+    const [showComments, setShowComments] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
     const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
-    const handleLike = () => toggleLike(postData.id);
+    const showToast = useToastStore((s) => s.show);
+    const currentUserId = useAuthStore((s) => s.user?.id);
+
+    const handleDeletePost = async () => {
+        if (!confirm("Báº¡n cÃ³ cháº¯c muá»‘n xÃ³a bÃ i viáº¿t nÃ y? HÃ nh Ä‘á»™ng nÃ y sáº½ xÃ³a táº¥t cáº£ bÃ¬nh luáº­n bÃªn trong.")) return;
+        try {
+            // Gá»i hÃ m onDelete Ä‘Æ°á»£c truyá»n tá»« Cha
+            await onDelete(postData.id);
+            showToast("ÄÃ£ xÃ³a bÃ i viáº¿t thÃ nh cÃ´ng", "success");
+        } catch (error) {
+            showToast("KhÃ´ng thá»ƒ xÃ³a bÃ i viáº¿t", "error");
+        }
+    };
+
+    const handleLike = () => {
+        // Gá»i hÃ m onLike Ä‘Æ°á»£c truyá»n tá»« Cha
+        onLike(postData.id);
+    };
 
     const handleShare = () => {
         navigator.clipboard.writeText(window.location.href)
-            .then(() => showToast('ÄÃ£ copy link bÃ i viáº¿t!'))
+            .then(() => showToast('ÄÃ£ copy link bÃ i viáº¿t!', 'success'))
             .catch(() => showToast('KhÃ´ng thá»ƒ copy link', 'error'));
     };
 
@@ -6046,9 +6431,8 @@ const PostCard = React.memo(({ postData }: { postData: PostDTO }) => {
         return url.match(/\.(mp4|webm|mov|ogg)$/i) != null || url.includes('/video/upload/');
     };
 
-    // HÃ m xá»­ lÃ½ táº£i áº£nh vá»
     const handleDownload = async (e: React.MouseEvent) => {
-        e.stopPropagation(); // NgÄƒn sá»± kiá»‡n click lan ra ngoÃ i lÃ m Ä‘Ã³ng modal
+        e.stopPropagation();
         try {
             const response = await fetch(postData.imageUrl!);
             const blob = await response.blob();
@@ -6067,46 +6451,60 @@ const PostCard = React.memo(({ postData }: { postData: PostDTO }) => {
 
     return (
         <>
-            <div className="overflow-hidden rounded-2xl bg-white shadow-sm border border-gray-100 transition hover:shadow-md">
+            <div className="overflow-hidden rounded-2xl bg-white shadow-sm border border-gray-100 transition hover:shadow-md mt-4">
                 {/* HEADER */}
                 <div className="flex items-center justify-between px-5 pt-5">
-                    <div className="flex items-center gap-3">
-                        <img
-                            src={postData.authorAvatar || 'https://media.istockphoto.com/id/1196083861/vi/vec-to/b%E1%BB%99-bi%E1%BB%83u-t%C6%B0%E1%BB%A3ng-%C4%91%E1%BA%A7u-ng%C6%B0%E1%BB%9Di-%C4%91%C3%A0n-%C3%B4ng-%C4%91%C6%A1n-gi%E1%BA%A3n.jpg?s=612x612&w=0&k=20&c=7juGotIovn0c2KFGhZ_DcEqpfiSyYl-zz2ty9XYnYNs='}
-                            alt={postData.authorName}
-                            className="h-11 w-11 rounded-full object-cover ring-2 ring-[#2e62a0]/20"
-                        />
-                        <div>
-                            <p className="text-sm font-semibold text-gray-800">{postData.authorName}</p>
-                            <p className="text-xs text-gray-400">{postData.createdAt}</p>
+                    <div className="flex items-center gap-3 mb-4">
+                        <Link to={`/profile/${postData.authorId}`} className="block shrink-0 transition-transform hover:scale-105">
+                            <img
+                                src={postData.authorAvatar || 'https://res.cloudinary.com/dayoanitt/image/upload/v1774417116/davbhywnemftongrmdwx.jpg'}
+                                alt={postData.authorName}
+                                className="h-11 w-11 rounded-full object-cover ring-2 ring-[#2e62a0]/20"
+                            />
+                        </Link>
+
+                        <div className="flex flex-col">
+                            <Link
+                                to={`/profile/${postData.authorId}`}
+                                className="text-[15px] font-bold text-gray-900 hover:underline hover:text-[#2e62a0]"
+                            >
+                                {postData.authorName}
+                            </Link>
+                            <span className="text-xs text-gray-500">{postData.createdAt || "Vá»«a xong"}</span>
                         </div>
                     </div>
-                    <button className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100">
-                        <MoreHorizontal size={18} />
-                    </button>
+
+                    {/* MENU (3 CHáº¤M) */}
+                    <div className="relative">
+                        <button onClick={() => setShowMenu(!showMenu)} className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100">
+                            <MoreHorizontal size={18} />
+                        </button>
+                        {showMenu && (
+                            <div className="absolute right-0 top-full mt-1 w-32 rounded-xl bg-white shadow-lg border border-gray-100 overflow-hidden z-10">
+                                {currentUserId === postData.authorId ? (
+                                    <button onClick={handleDeletePost} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition">
+                                        <Trash2 size={16} /> XÃ³a bÃ i
+                                    </button>
+                                ) : (
+                                    <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                        BÃ¡o cÃ¡o
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* CONTENT */}
                 <p className="px-5 py-4 text-sm leading-relaxed text-gray-700">{postData.content}</p>
 
-                {/* IMAGE/VIDEO BÃŠN TRONG POST CARD */}
+                {/* IMAGE/VIDEO */}
                 {postData.imageUrl && (
                     <div className="mt-3 overflow-hidden border-y border-gray-50 bg-black">
                         {isVideoUrl(postData.imageUrl) ? (
-                            <video
-                                src={postData.imageUrl}
-                                controls
-                                className="max-h-[500px] w-full object-contain"
-                                preload="metadata"
-                            />
+                            <video src={postData.imageUrl} controls className="max-h-[500px] w-full object-contain" preload="metadata" />
                         ) : (
-                            <img
-                                src={postData.imageUrl}
-                                alt="post"
-                                // Äá»•i con trá» thÃ nh zoom-in vÃ  thÃªm onClick Ä‘á»ƒ má»Ÿ Modal
-                                className="max-h-[500px] w-full object-contain bg-gray-50 cursor-zoom-in transition-transform hover:scale-[1.02]"
-                                onClick={() => setIsImageModalOpen(true)}
-                            />
+                            <img src={postData.imageUrl} alt="post" className="max-h-[500px] w-full object-contain bg-gray-50 cursor-zoom-in transition-transform hover:scale-[1.02]" onClick={() => setIsImageModalOpen(true)} />
                         )}
                     </div>
                 )}
@@ -6121,53 +6519,34 @@ const PostCard = React.memo(({ postData }: { postData: PostDTO }) => {
                 <div className="flex border-t border-gray-100 px-2 py-1">
                     {[
                         { icon: ThumbsUp, label: 'ThÃ­ch', action: handleLike, active: postData.likedByMe, color: 'text-[#2e62a0]' },
-                        { icon: MessageCircle, label: 'BÃ¬nh luáº­n', action: () => {}, active: false, color: 'text-[#71bc59]' },
+                        { icon: MessageCircle, label: 'BÃ¬nh luáº­n', action: () => setShowComments(!showComments), active: showComments, color: 'text-[#71bc59]' },
                         { icon: Share2, label: 'Chia sáº»', action: handleShare, active: false, color: 'text-gray-500' },
                     ].map(({ icon: Icon, label, action, active, color }) => (
-                        <button
-                            key={label}
-                            onClick={action}
-                            className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition hover:bg-gray-50 ${
-                                active ? color : 'text-gray-400'
-                            }`}
-                        >
+                        <button key={label} onClick={action} className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition hover:bg-gray-50 ${active ? color : 'text-gray-400'}`}>
                             <Icon size={18} strokeWidth={active ? 2.5 : 2} />
                             {label}
                         </button>
                     ))}
                 </div>
+
+                {/* COMMENT SECTION */}
+                {showComments && (
+                    <div className="px-5 pb-5">
+                        <CommentSection postId={postData.id} />
+                    </div>
+                )}
             </div>
 
-            {/* --- MODAL XEM áº¢NH TOÃ€N MÃ€N HÃŒNH --- */}
+            {/* MODAL áº¢NH */}
             {isImageModalOpen && postData.imageUrl && (
-                <div
-                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm transition-opacity"
-                    onClick={() => setIsImageModalOpen(false)} // Báº¥m ra ngoÃ i vÃ¹ng tá»‘i Ä‘á»ƒ Ä‘Ã³ng
-                >
-                    {/* NÃºt Ä‘Ã³ng */}
-                    <button
-                        onClick={() => setIsImageModalOpen(false)}
-                        className="absolute right-4 top-4 z-10 rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white transition"
-                    >
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm transition-opacity" onClick={() => setIsImageModalOpen(false)}>
+                    <button onClick={() => setIsImageModalOpen(false)} className="absolute right-4 top-4 z-10 rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white transition">
                         <X size={28} />
                     </button>
-
-                    {/* NÃºt Táº£i xuá»‘ng */}
-                    <button
-                        onClick={handleDownload}
-                        className="absolute right-16 top-4 z-10 rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white transition flex items-center gap-2"
-                        title="Táº£i áº£nh vá» mÃ¡y"
-                    >
+                    <button onClick={handleDownload} className="absolute right-16 top-4 z-10 rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white transition flex items-center gap-2" title="Táº£i áº£nh vá» mÃ¡y">
                         <Download size={24} />
                     </button>
-
-                    {/* áº¢nh hiá»ƒn thá»‹ á»Ÿ giá»¯a */}
-                    <img
-                        src={postData.imageUrl}
-                        alt="Zoomed post"
-                        className="max-h-[90vh] max-w-[90vw] object-contain select-none cursor-zoom-out"
-                        onClick={(e) => e.stopPropagation()} // Chá»‘ng ná»•i bá»t, khÃ´ng bá»‹ Ä‘Ã³ng khi lá»¡ báº¥m nháº§m vÃ o áº£nh
-                    />
+                    <img src={postData.imageUrl} alt="Zoomed post" className="max-h-[90vh] max-w-[90vw] object-contain select-none cursor-zoom-out" onClick={(e) => e.stopPropagation()} />
                 </div>
             )}
         </>
@@ -6176,6 +6555,431 @@ const PostCard = React.memo(({ postData }: { postData: PostDTO }) => {
 
 export default PostCard;
 
+
+==================================================
+FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\pages\home\components\Profile.tsx
+==================================================
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+
+import { userApi } from "../../../api/userApi.ts";
+import LeftSidebar from "../components/LeftSidebar";
+import { useAuthStore } from "../../../store/useAuthStore.ts";
+import {Camera, Download, Edit3, Loader2, UserPlus, X} from "lucide-react";
+import {usePostStore} from "../../../store/usePostStore.ts";
+import PostCard from "./PostCard.tsx";
+
+function PostSkeleton() {
+    return (
+        <div className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100 animate-pulse mt-4">
+            <div className="flex items-center gap-3 mb-4">
+                <div className="h-11 w-11 rounded-full bg-gray-200"></div>
+                <div className="flex flex-col gap-2">
+                    <div className="h-3 w-32 rounded bg-gray-200"></div>
+                    <div className="h-2 w-20 rounded bg-gray-100"></div>
+                </div>
+            </div>
+            <div className="space-y-2 mb-4">
+                <div className="h-3 w-full rounded bg-gray-200"></div>
+                <div className="h-3 w-4/5 rounded bg-gray-200"></div>
+            </div>
+            <div className="h-48 w-full rounded-xl bg-gray-100"></div>
+        </div>
+    );
+}
+export default function Profile() {
+    const userId = useParams<{ id: string }>().id;
+    const currentUser = useAuthStore((state) => state.user);
+    const [profile, setProfile] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const isOwnProfile = currentUser?.id === userId;
+
+    // CÃ¡c Ref Ä‘á»ƒ chá»c vÃ o tháº» input file áº©n
+    const avatarInputRef = useRef<HTMLInputElement>(null);
+    const coverInputRef = useRef<HTMLInputElement>(null);
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editForm, setEditForm] = useState({
+        fullName: "",
+        bio: "",
+        location: "",
+        websiteUrl: ""
+    });
+
+    const [previewImage, setPreviewImage] = useState<{ url: string, type: 'avatar' | 'cover' | null }>({
+        url: '',
+        type: null
+    });
+
+    const [isSaving, setIsSaving] = useState(false);
+
+    // post
+    // --- Láº¥y dá»¯ liá»‡u cá»§a Profile thay vÃ¬ Home ---
+    const posts = usePostStore(s => s.profilePosts);
+    const isPostsLoading = usePostStore(s => s.isProfileLoading);
+    const isPostsLoadingMore = usePostStore(s => s.isProfileLoadingMore);
+    const hasMorePosts = usePostStore(s => s.hasMoreProfilePosts);
+
+    const fetchUserPosts = usePostStore(s => s.fetchUserPosts);
+    const loadMoreUserPosts = usePostStore(s => s.loadMoreUserPosts);
+    const toggleLikeProfilePost = usePostStore(s => s.toggleLikeProfilePost);
+    const deleteProfilePost = usePostStore(s => s.deleteProfilePost);
+    const resetProfilePosts = usePostStore(s => s.resetProfilePosts);
+
+    const sentinelRef = useRef<HTMLDivElement>(null);
+
+    // Effect fetch bÃ i viáº¿t
+    useEffect(() => {
+        if (userId) {
+            fetchUserPosts(userId);
+        }
+        return () => resetProfilePosts(); // Dá»n dáº¹p state profile khi rá»i Ä‘i
+    }, [userId, fetchUserPosts, resetProfilePosts]);
+
+    // --- CÃC HÃ€M Xá»¬ LÃ UPLOAD áº¢NH NGáº¦M LÃŠN CLOUDINARY ---
+    const uploadFileToCloudinary = async (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", import.meta.env.VITE_CLOUD_UPLOAD_PRESET);
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUD_NAME}/image/upload`, {
+            method: "POST",
+            body: formData,
+        });
+        const data = await res.json();
+        return data.secure_url;
+    };
+
+    const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setIsUploadingImage(true);
+            const url = await uploadFileToCloudinary(file);
+            await userApi.updateAvatar(url);
+            setProfile({ ...profile, avatarUrl: url });
+        } catch (error) {
+            console.error("Lá»—i upload avatar", error);
+            alert("Lá»—i khi táº£i áº£nh Ä‘áº¡i diá»‡n lÃªn!");
+        } finally {
+            setIsUploadingImage(false);
+            if (avatarInputRef.current) avatarInputRef.current.value = '';
+        }
+    };
+
+    const handleCoverFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setIsUploadingImage(true);
+            const url = await uploadFileToCloudinary(file);
+            await userApi.updateCover(url);
+            setProfile({ ...profile, coverUrl: url });
+        } catch (error) {
+            console.error("Lá»—i upload cover", error);
+            alert("Lá»—i khi táº£i áº£nh bÃ¬a lÃªn!");
+        } finally {
+            setIsUploadingImage(false);
+            if (coverInputRef.current) coverInputRef.current.value = '';
+        }
+    };
+    // ----------------------------------------------------
+
+    const handleOpenEditModal = () => {
+        setEditForm({
+            fullName: profile.fullName || "",
+            bio: profile.bio || "",
+            location: profile.location || "",
+            websiteUrl: profile.websiteUrl || ""
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleSaveProfile = async () => {
+        setIsSaving(true);
+        try {
+            await userApi.updateProfile({
+                fullName: editForm.fullName,
+                bio: editForm.bio,
+                location: editForm.location,
+                websiteUrl: editForm.websiteUrl
+            });
+            setProfile({
+                ...profile,
+                fullName: editForm.fullName,
+                bio: editForm.bio,
+                location: editForm.location,
+                websiteUrl: editForm.websiteUrl,
+            });
+            setIsEditModalOpen(false);
+        } catch (error) {
+            console.error("Lá»—i khi cáº­p nháº­t:", error);
+            alert("CÃ³ lá»—i xáº£y ra!");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setEditForm({ ...editForm, [e.target.name]: e.target.value });
+    };
+
+    useEffect(() => {
+        if (!userId) return;
+        setIsLoading(true);
+        userApi.getProfile(userId)
+            .then((res) => setProfile(res.data.data))
+            .catch((err) => console.error(err))
+            .finally(() => setIsLoading(false));
+    }, [userId]);
+
+    const handleDownloadImage = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!previewImage.url) return;
+        try {
+            const response = await fetch(previewImage.url);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `connecthub-${previewImage.type}-${userId}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            alert('Lá»—i khi táº£i áº£nh!');
+        }
+    };
+
+
+
+
+    // Báº¯t sá»± kiá»‡n cuá»™n xuá»‘ng (IntersectionObserver)
+    useEffect(() => {
+        const el = sentinelRef.current;
+        if (!el || !userId) return;
+        const observer = new IntersectionObserver((entry) => {
+            if (entry[0].isIntersecting) {
+                loadMoreUserPosts(userId);
+            }
+        }, { threshold: 0.1 });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [hasMorePosts, loadMoreUserPosts, userId]);
+    if (isLoading) return <div className="p-10 text-center text-gray-500">Äang táº£i...</div>;
+    if (!profile) return <div className="p-10 text-center text-red-500">KhÃ´ng tÃ¬m tháº¥y ngÆ°á»i dÃ¹ng!</div>;
+
+    return (
+        <div className="flex min-h-screen bg-gray-50 animate-fade-in">
+            <div className="hidden md:block">
+                <LeftSidebar/>
+            </div>
+
+            <main className="flex-1 px-4 py-6 md:px-6 lg:px-10">
+                <div className="mx-auto max-w-[800px] flex flex-col gap-5">
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+
+                        {/* Khu vá»±c Cover */}
+                        <div className="relative h-64 sm:h-80 bg-gray-200 group">
+                            <img
+                                src={profile.coverUrl || "https://res.cloudinary.com/dayoanitt/image/upload/v1774417246/ydts7bqldo4rdl4izki8.jpg"}
+                                alt="Cover"
+                                className="w-full h-full object-cover cursor-zoom-in"
+                                onClick={() => setPreviewImage({ url: profile.coverUrl, type: 'cover' })}
+                            />
+                        </div>
+
+                        {/* Khu vá»±c Avatar & Info */}
+                        <div className="px-6 pb-6 relative">
+                            <div className="flex flex-col sm:flex-row sm:items-end justify-between -mt-16 sm:-mt-20 mb-4 z-10 relative">
+
+                                {/* Avatar */}
+                                <div className="relative group w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-white bg-white shadow-md">
+                                    <img
+                                        src={profile.avatarUrl || "https://res.cloudinary.com/dayoanitt/image/upload/v1774417116/davbhywnemftongrmdwx.jpg"}
+                                        alt="Avatar"
+                                        className="w-full h-full rounded-full object-cover cursor-zoom-in bg-white"
+                                        onClick={() => setPreviewImage({ url: profile.avatarUrl, type: 'avatar' })}
+                                    />
+                                </div>
+
+                                <div className="mt-4 sm:mt-0 flex gap-2">
+                                    {isOwnProfile ? (
+                                        <button
+                                            onClick={handleOpenEditModal}
+                                            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded-lg transition"
+                                        >
+                                            <Edit3 size={18}/> Chá»‰nh sá»­a thÃ´ng tin
+                                        </button>
+                                    ) : (
+                                        <button
+                                            className="flex items-center gap-2 px-4 py-2 bg-[#2e62a0] hover:bg-[#234c7d] text-white font-semibold rounded-lg transition shadow-sm">
+                                            <UserPlus size={18}/> ThÃªm báº¡n bÃ¨
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* ThÃ´ng tin Text */}
+                            <div>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{profile.fullName}</h1>
+                                {profile.bio && <p className="text-gray-600 mt-2 whitespace-pre-wrap">{profile.bio}</p>}
+                            </div>
+                        </div>
+
+                        {/* Thanh Tabs */}
+                        <div className="border-t border-gray-100 px-6 flex gap-8 text-gray-600 font-medium">
+                            <button className="py-4 border-b-2 border-[#2e62a0] text-[#2e62a0]">BÃ i viáº¿t</button>
+                            <button className="py-4 hover:text-gray-900 transition">Báº¡n bÃ¨</button>
+                        </div>
+                    </div>
+
+                    {/* VÃ™NG CHá»¨A BÃ€I VIáº¾T */}
+                    <div className="flex flex-col gap-4">
+                        {isPostsLoading ? (
+                            [1, 2, 3].map((i) => <PostSkeleton key={i} />)
+                        ) : posts.length === 0 ? (
+                            <div className="rounded-2xl bg-white p-8 text-center text-gray-500 shadow-sm mt-4">
+                                {isOwnProfile ? "Báº¡n chÆ°a cÃ³ bÃ i viáº¿t nÃ o." : "NgÆ°á»i dÃ¹ng nÃ y chÆ°a cÃ³ bÃ i viáº¿t nÃ o."}
+                            </div>
+                        ) : (
+                            posts.map((post, index) => (
+                                <PostCard
+                                    key={`${post.id}-${index}`}
+                                    postData={post}
+                                    onLike={toggleLikeProfilePost}
+                                    onDelete={deleteProfilePost}
+                                />
+                            ))
+                        )}
+
+                        {/* Tháº» theo dÃµi cuá»™n */}
+                        <div ref={sentinelRef} className="h-4"></div>
+
+                        {isPostsLoadingMore && (
+                            <div className="flex justify-center py-4">
+                                <Loader2 size={24} className="animate-spin text-[#2e62a0]" />
+                            </div>
+                        )}
+
+                        {!hasMorePosts && !isPostsLoading && posts.length > 0 && (
+                            <p className="py-6 text-center text-sm text-gray-400">
+                                ÄÃ£ xem háº¿t bÃ i viáº¿t cá»§a ngÆ°á»i nÃ y!
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </main>
+
+            {/* --- MODAL CHá»ˆNH Sá»¬A THÃ”NG TIN (CHá»ˆ CÃ’N NHáº¬P TEXT, KO CÃ“ Äá»”I áº¢NH Ná»®A) --- */}
+            {isEditModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+                        {/* Header Modal */}
+                        <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 shrink-0">
+                            <h2 className="text-xl font-bold text-gray-800">Chá»‰nh sá»­a thÃ´ng tin</h2>
+                            <button
+                                onClick={() => setIsEditModalOpen(false)}
+                                className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition"
+                            >
+                                <X size={20}/>
+                            </button>
+                        </div>
+
+                        {/* Body Modal (Chá»‰ cÃ²n cÃ¡c trÆ°á»ng nháº­p chá»¯) */}
+                        <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Há» vÃ  tÃªn</label>
+                                <input type="text" name="fullName" value={editForm.fullName} onChange={handleFormChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2e62a0]/50" />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Tiá»ƒu sá»­ (Bio)</label>
+                                <textarea name="bio" value={editForm.bio} onChange={handleFormChange} placeholder="Viáº¿t vÃ i dÃ²ng giá»›i thiá»‡u vá» báº£n thÃ¢n..." className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2e62a0]/50 min-h-[80px] resize-y" />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Äáº¿n tá»« (Location)</label>
+                                <input type="text" name="location" value={editForm.location} onChange={handleFormChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2e62a0]/50" />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Trang web</label>
+                                <input type="text" name="websiteUrl" value={editForm.websiteUrl} onChange={handleFormChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2e62a0]/50" />
+                            </div>
+                        </div>
+
+                        {/* Footer Modal */}
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                            <button onClick={() => setIsEditModalOpen(false)} className="px-5 py-2.5 font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition">Há»§y</button>
+                            <button onClick={handleSaveProfile} disabled={isSaving} className="px-5 py-2.5 font-medium text-white bg-[#2e62a0] rounded-lg hover:bg-[#234c7d] transition disabled:opacity-70 flex items-center gap-2">
+                                {isSaving ? "Äang lÆ°u..." : "LÆ°u thay Ä‘á»•i"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- MODAL XEM áº¢NH VÃ€ Äá»”I áº¢NH --- */}
+            {previewImage.type && previewImage.url && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm transition-opacity"
+                    onClick={() => setPreviewImage({ url: '', type: null })}
+                >
+                    <button onClick={() => setPreviewImage({ url: '', type: null })} className="absolute right-4 top-4 z-10 rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white transition">
+                        <X size={28} />
+                    </button>
+
+                    <button onClick={handleDownloadImage} className="absolute right-16 top-4 z-10 rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white transition flex items-center gap-2" title="Táº£i áº£nh vá» mÃ¡y">
+                        <Download size={28} />
+                    </button>
+
+                    <div className="relative flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+                        <img
+                            src={previewImage.url}
+                            alt="Zoomed Profile Image"
+                            className="max-h-[80vh] max-w-[90vw] object-contain select-none cursor-zoom-out shadow-2xl rounded-sm"
+                        />
+
+                        {/* NÃºt Äá»•i áº¢nh lÆ¡ lá»­ng bÃªn dÆ°á»›i áº£nh to (Chá»‰ hiá»‡n khi lÃ  profile cá»§a mÃ¬nh) */}
+                        {isOwnProfile && (
+                            <div className="absolute -bottom-16">
+                                {previewImage.type === 'avatar' && (
+                                    <>
+                                        <input type="file" className="hidden" ref={avatarInputRef} accept="image/*" onChange={(e) => { handleAvatarFileChange(e); setPreviewImage({ url: '', type: null }); }} />
+                                        <button
+                                            onClick={() => avatarInputRef.current?.click()}
+                                            disabled={isUploadingImage}
+                                            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-5 py-2.5 rounded-full transition cursor-pointer font-medium text-sm backdrop-blur-md"
+                                        >
+                                            {isUploadingImage ? <span className="animate-pulse">Äang táº£i lÃªn...</span> : <><Camera size={18} /> Thay Ä‘á»•i áº£nh Ä‘áº¡i diá»‡n</>}
+                                        </button>
+                                    </>
+                                )}
+
+                                {previewImage.type === 'cover' && (
+                                    <>
+                                        <input type="file" className="hidden" ref={coverInputRef} accept="image/*" onChange={(e) => { handleCoverFileChange(e); setPreviewImage({ url: '', type: null }); }} />
+                                        <button
+                                            onClick={() => coverInputRef.current?.click()}
+                                            disabled={isUploadingImage}
+                                            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-5 py-2.5 rounded-full transition cursor-pointer font-medium text-sm backdrop-blur-md"
+                                        >
+                                            {isUploadingImage ? <span className="animate-pulse">Äang táº£i lÃªn...</span> : <><Camera size={18} /> Thay Ä‘á»•i áº£nh bÃ¬a</>}
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 
 ==================================================
@@ -6339,6 +7143,7 @@ import PublicRoute from "../guards/PublicRoute.tsx";
 import {ProtectedRoute} from "../guards/ProtectedRoute.tsx";
 import AuthPage from "../pages/auth/AuthPage.tsx";
 import HomePage from "../pages/home/HomePage.tsx";
+import Profile from "../pages/home/components/Profile.tsx";
 
 // type indexProps = {};
 
@@ -6369,6 +7174,10 @@ export const router =createBrowserRouter([
                         index: true, // index = true nghÄ©a lÃ  path '/'
                         element: <HomePage />,
                     },
+                    {
+                        path: "/profile/:id",
+                        element: <Profile/>
+                    }
                 ]
             },
             // 404 Not Found
@@ -6388,22 +7197,53 @@ export const router =createBrowserRouter([
 FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\store\useAuthStore.ts
 ==================================================
 import {create} from 'zustand';
+import {jwtDecode} from "jwt-decode";
 
+// Giao diá»‡n dá»¯ liá»‡u Ä‘Æ°á»£c láº¥y tá»« JWT Payload do Backend tráº£ vá»
+interface UserPayload {
+    sub: string;    // Backend dÃ¹ng 'sub' Ä‘á»ƒ lÆ°u UUID cá»§a User
+    roles: string;
+    exp: number;
+    iat: number;
+    iss: string;
+}
 interface AuthState {
-    accessToken:string |null;
-    isAuthenticated:boolean;
-    isInitialized:boolean;
-    setAuth:(token:string)=>void;
-    clearAuth:()=>void;
-    setInitialized:()=>void;
+    accessToken: string | null;
+    user: { id: string, roles: string } | null;
+    isAuthenticated: boolean;
+    isInitialized: boolean;
+    setAuth: (token: string) => void;
+    clearAuth: () => void;
+    setInitialized: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
     accessToken: null,
+    user: null,
     isAuthenticated: false,
     isInitialized: false,
-    setAuth: (token: string) => set({ accessToken: token, isAuthenticated: true }),
-    clearAuth: () => set({ accessToken: null, isAuthenticated: false }),
+
+    setAuth: (token: string) => {
+        try {
+            // Giáº£i mÃ£ token Ä‘á»ƒ láº¥y thÃ´ng tin User
+            const decoded = jwtDecode<UserPayload>(token);
+            set({
+                accessToken: token,
+                user: { id: decoded.sub, roles: decoded.roles }, // LÆ°u ID Ä‘á»ƒ cÃ¡c component khÃ¡c dÃ¹ng
+                isAuthenticated: true
+            });
+        } catch (error) {
+            console.error("Invalid token format", error);
+            set({ accessToken: null, user: null, isAuthenticated: false });
+        }
+    },
+
+    clearAuth: () => set({
+        accessToken: null,
+        user: null,
+        isAuthenticated: false
+    }),
+
     setInitialized: () => set({ isInitialized: true }),
 }));
 
@@ -6423,7 +7263,7 @@ interface FriendStore {
     sendRequest: (userId: number) => Promise<void>;
 }
 
-export const useFriendStore = create<FriendStore>((set, get) => ({
+export const useFriendStore = create<FriendStore>((set) => ({
     suggestions: [],
     sentIds: new Set(),
     isLoading: false,
@@ -6457,82 +7297,181 @@ export const useFriendStore = create<FriendStore>((set, get) => ({
 ==================================================
 FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\store\usePostStore.ts
 ==================================================
-import {postApi, type PostDTO} from "../api/postApi.ts";
-import {create} from "zustand";
+import { postApi, type PostDTO } from "../api/postApi.ts";
+import { create } from "zustand";
 
 interface PostStore {
+    // --- DÃ nh cho Home Feed ---
     posts: PostDTO[];
     isLoading: boolean;
     isLoadingMore: boolean;
     hasMore: boolean;
-    page: number;
+    nextCursor: any;
 
     fetchPosts: () => Promise<void>;
     loadMore: () => Promise<void>;
     addPost: (post: PostDTO) => void;
-    toggleLike: (postId: number) => Promise<void>;
+    toggleLike: (postId: string) => Promise<void>;
+    deletePost: (postId: string) => Promise<void>;
+
+    // --- DÃ nh riÃªng cho Profile ---
+    profilePosts: PostDTO[];
+    isProfileLoading: boolean;
+    isProfileLoadingMore: boolean;
+    hasMoreProfilePosts: boolean;
+    profileNextCursor: any;
+
+    fetchUserPosts: (userId: string) => Promise<void>;
+    loadMoreUserPosts: (userId: string) => Promise<void>;
+    toggleLikeProfilePost: (postId: string) => Promise<void>;
+    deleteProfilePost: (postId: string) => Promise<void>;
+    resetProfilePosts: () => void;
 }
+
 export const usePostStore = create<PostStore>((set, get) => ({
+    // STATE CHO HOME
     posts: [],
     isLoading: false,
     isLoadingMore: false,
     hasMore: true,
-    page: 0,
+    nextCursor: "",
 
+    // STATE CHO PROFILE
+    profilePosts: [],
+    isProfileLoading: false,
+    isProfileLoadingMore: false,
+    hasMoreProfilePosts: true,
+    profileNextCursor: "",
+
+    // ---------------- HOME ACTIONS ----------------
     fetchPosts: async () => {
-        set({ isLoading: true, page: 0 });
+        set({ isLoading: true, nextCursor: "", hasMore: true });
         try {
-            const resp = await postApi.getFeed(0, 5);
-            const { content, last } = resp.data.data;
-            set({ posts: content, hasMore: !last, page: 1 });
-        } catch (_) {}
-        finally { set({ isLoading: false }); }
+            const resp = await postApi.getFeed("", 5);
+            const { posts, nextCursor, hasNext } = resp.data.data;
+            set({ posts, hasMore: hasNext, nextCursor: nextCursor || "" });
+        } catch (_) {
+            console.error("Lá»—i khi fetch bÃ i viáº¿t");
+        } finally {
+            set({ isLoading: false });
+        }
     },
 
     loadMore: async () => {
-        const { page, hasMore, isLoadingMore } = get();
+        const { nextCursor, hasMore, isLoadingMore } = get();
         if (!hasMore || isLoadingMore) return;
-
         set({ isLoadingMore: true });
         try {
-            const resp = await postApi.getFeed(page, 5);
-            const { content, last } = resp.data.data;
+            const resp = await postApi.getFeed(nextCursor, 5);
+            const { posts, nextCursor: newCursor, hasNext } = resp.data.data;
             set((s) => ({
-                posts: [...s.posts, ...content],
-                hasMore: !last,
-                page: s.page + 1,
+                posts: [...s.posts, ...posts],
+                hasMore: hasNext,
+                nextCursor: newCursor || "",
             }));
-        } catch (_) {}
-        finally { set({ isLoadingMore: false }); }
+        } catch (_) {
+            console.error("Lá»—i khi táº£i thÃªm bÃ i viáº¿t");
+        } finally {
+            set({ isLoadingMore: false });
+        }
     },
 
-    addPost: (post) =>
-        set((s) => ({ posts: [post, ...s.posts] })),
+    addPost: (post) => set((s) => ({ posts: [post, ...s.posts] })),
 
-    // Optimistic update
     toggleLike: async (postId) => {
-        // 1. Cáº­p nháº­t UI ngay
         set((s) => ({
             posts: s.posts.map((p) =>
-                p.id === postId
-                    ? { ...p, likedByMe: !p.likedByMe, likeCount: p.likedByMe ? p.likeCount - 1 : p.likeCount + 1 }
-                    : p
+                p.id === postId ? { ...p, likedByMe: !p.likedByMe, likeCount: p.likedByMe ? p.likeCount - 1 : p.likeCount + 1 } : p
             ),
         }));
-
         try {
             await postApi.toggleLike(postId);
         } catch (_) {
-            // 2. Rollback náº¿u API lá»—i
+            // Revert náº¿u lá»—i
             set((s) => ({
                 posts: s.posts.map((p) =>
-                    p.id === postId
-                        ? { ...p, likedByMe: !p.likedByMe, likeCount: p.likedByMe ? p.likeCount - 1 : p.likeCount + 1 }
-                        : p
+                    p.id === postId ? { ...p, likedByMe: !p.likedByMe, likeCount: p.likedByMe ? p.likeCount - 1 : p.likeCount + 1 } : p
                 ),
             }));
         }
     },
+
+    deletePost: async (postId: string) => {
+        try {
+            await postApi.deletePost(postId);
+            set((s) => ({ posts: s.posts.filter((p) => p.id !== postId) }));
+        } catch (error) {
+            console.error("Lá»—i khi xÃ³a bÃ i viáº¿t:", error);
+            throw error;
+        }
+    },
+
+    // ---------------- PROFILE ACTIONS ----------------
+    resetProfilePosts: () => set({ profilePosts: [], isProfileLoading: false, hasMoreProfilePosts: true, profileNextCursor: "" }),
+
+    fetchUserPosts: async (userId: string) => {
+        set({ isProfileLoading: true, profileNextCursor: "", hasMoreProfilePosts: true, profilePosts: [] });
+        try {
+            const resp = await postApi.getUserPosts(userId, "", 5);
+            const { posts, nextCursor, hasNext } = resp.data.data;
+            set({
+                profilePosts: posts,
+                hasMoreProfilePosts: hasNext,
+                profileNextCursor: nextCursor || ""
+            });
+        } catch (_) {
+            console.error("Lá»—i khi fetch bÃ i viáº¿t cá»§a user");
+        } finally {
+            set({ isProfileLoading: false });
+        }
+    },
+
+    loadMoreUserPosts: async (userId: string) => {
+        const { profileNextCursor, hasMoreProfilePosts, isProfileLoadingMore } = get();
+        if (!hasMoreProfilePosts || isProfileLoadingMore) return;
+
+        set({ isProfileLoadingMore: true });
+        try {
+            const resp = await postApi.getUserPosts(userId, profileNextCursor, 5);
+            const { posts, nextCursor: newCursor, hasNext } = resp.data.data;
+            set((s) => ({
+                profilePosts: [...s.profilePosts, ...posts],
+                hasMoreProfilePosts: hasNext,
+                profileNextCursor: newCursor || "",
+            }));
+        } catch (_) {
+            console.error("Lá»—i khi táº£i thÃªm bÃ i viáº¿t cá»§a user");
+        } finally {
+            set({ isProfileLoadingMore: false });
+        }
+    },
+
+    toggleLikeProfilePost: async (postId) => {
+        set((s) => ({
+            profilePosts: s.profilePosts.map((p) =>
+                p.id === postId ? { ...p, likedByMe: !p.likedByMe, likeCount: p.likedByMe ? p.likeCount - 1 : p.likeCount + 1 } : p
+            ),
+        }));
+        try {
+            await postApi.toggleLike(postId);
+        } catch (_) {
+            set((s) => ({
+                profilePosts: s.profilePosts.map((p) =>
+                    p.id === postId ? { ...p, likedByMe: !p.likedByMe, likeCount: p.likedByMe ? p.likeCount - 1 : p.likeCount + 1 } : p
+                ),
+            }));
+        }
+    },
+
+    deleteProfilePost: async (postId: string) => {
+        try {
+            await postApi.deletePost(postId);
+            set((s) => ({ profilePosts: s.profilePosts.filter((p) => p.id !== postId) }));
+        } catch (error) {
+            console.error("Lá»—i khi xÃ³a bÃ i viáº¿t:", error);
+            throw error;
+        }
+    }
 }));
 
 
@@ -6540,8 +7479,7 @@ export const usePostStore = create<PostStore>((set, get) => ({
 FILE: D:\project\java6_new\ConnectHub\ConnectHubFE\src\store\useToastStore.ts
 ==================================================
 import {create} from 'zustand';
-import {ToastType} from '../components/Toast';
-
+import type { ToastType } from '../components/Toast';
 interface ToastItem {
     id: number;
     message: string;

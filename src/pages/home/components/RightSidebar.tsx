@@ -1,100 +1,110 @@
-import {useEffect} from 'react';
-import {Check, Loader2, UserPlus} from 'lucide-react';
-import {useFriendStore} from '../../../store/useFriendStore';
-import {useToastStore} from '../../../store/useToastStore';
 
-const MOCK_ONLINE = [
-    { id: 1, name: 'Minh Anh',  avatar: 'https://i.pravatar.cc/100?img=20' },
-    { id: 2, name: 'Hải Đăng',  avatar: 'https://i.pravatar.cc/100?img=30' },
-    { id: 3, name: 'Thu Trang', avatar: 'https://i.pravatar.cc/100?img=40' },
-];
+import { Link } from 'react-router-dom';
+import { UserPlus, UserCheck, Loader2 } from 'lucide-react';
+import {useToastStore} from "../../../store/useToastStore.ts";
+import {useEffect, useState} from "react";
 
-// Mock fallback khi API chưa có
-const MOCK_SUGGESTIONS = [
-    { id: 1, name: 'Nguyễn Hà My',  mutualFriends: 5, avatar: 'https://i.pravatar.cc/100?img=11' },
-    { id: 2, name: 'Trần Văn Đức',  mutualFriends: 3, avatar: 'https://i.pravatar.cc/100?img=22' },
-    { id: 3, name: 'Phạm Thị Hoa',  mutualFriends: 8, avatar: 'https://i.pravatar.cc/100?img=33' },
-    { id: 4, name: 'Lê Quốc Toản',  mutualFriends: 2, avatar: 'https://i.pravatar.cc/100?img=44' },
-];
+import {friendApi, type UserSuggestion} from "../../../api/friendApi.ts";
 
 export default function RightSidebar() {
-    const { suggestions, sentIds, isLoading, fetchSuggestions, sendRequest } = useFriendStore();
+    const [suggestions, setSuggestions] = useState<UserSuggestion[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
     const showToast = useToastStore((s) => s.show);
 
     useEffect(() => {
+        const fetchSuggestions = async () => {
+            try {
+                const res = await friendApi.getSuggestions();
+                setSuggestions(res.data.data);
+            } catch (error) {
+                console.error("Lỗi tải gợi ý kết bạn:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
         fetchSuggestions();
     }, []);
 
-    const displayList = suggestions.length > 0 ? suggestions : MOCK_SUGGESTIONS;
+    const handleSendRequest = async (userId: string) => {
+        try {
+            // Optimistic update (Hiển thị đã gửi ngay lập tức)
+            setRequestedIds((prev) => new Set(prev).add(userId));
 
-    const handleSendRequest = async (userId: number, name: string) => {
-        await sendRequest(userId);
-        showToast(`Đã gửi lời mời đến ${name}! 👋`);
+            await friendApi.sendFriendRequest(userId);
+            showToast("Đã gửi lời mời kết bạn", "success");
+        } catch (error: any) {
+            // Revert nếu lỗi
+            setRequestedIds((prev) => {
+                const next = new Set(prev);
+                next.delete(userId);
+                return next;
+            });
+            showToast(error.response?.data?.message || "Không thể gửi lời mời", "error");
+        }
     };
 
+    if (isLoading) {
+        return (
+            <div className="flex justify-center p-6">
+                <Loader2 className="animate-spin text-[#2e62a0]" />
+            </div>
+        );
+    }
+
+    if (suggestions.length === 0) {
+        return null; // Không hiện gì nếu không có gợi ý
+    }
+
     return (
-        <aside className="flex w-72 flex-shrink-0 flex-col gap-6 sticky top-6">
-
-            {/* GỢI Ý KẾT BẠN */}
+        <div className="w-80 space-y-6">
             <div className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100">
-                <h3 className="mb-4 text-sm font-semibold text-gray-700">Gợi ý kết bạn</h3>
+                <h3 className="mb-4 text-base font-bold text-gray-900">Gợi ý kết bạn</h3>
 
-                {isLoading ? (
-                    <div className="flex justify-center py-4">
-                        <Loader2 size={20} className="animate-spin text-[#2e62a0]" />
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-4">
-                        {displayList.map((user) => {
-                            const sent = sentIds.has(user.id);
-                            return (
-                                <div key={user.id} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <img src={user.avatar || 'https://media.istockphoto.com/id/1196083861/vi/vec-to/b%E1%BB%99-bi%E1%BB%83u-t%C6%B0%E1%BB%A3ng-%C4%91%E1%BA%A7u-ng%C6%B0%E1%BB%9Di-%C4%91%C3%A0n-%C3%B4ng-%C4%91%C6%A1n-gi%E1%BA%A3n.jpg?s=612x612&w=0&k=20&c=7juGotIovn0c2KFGhZ_DcEqpfiSyYl-zz2ty9XYnYNs='} alt={user.name}
-                                             className="h-10 w-10 rounded-full object-cover" />
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-800">{user.name}</p>
-                                            <p className="text-xs text-gray-400">{user.mutualFriends} bạn chung</p>
-                                        </div>
+                <div className="space-y-4">
+                    {suggestions.map((user) => {
+                        const isRequested = requestedIds.has(user.id);
+
+                        return (
+                            <div key={user.id} className="flex items-center justify-between gap-3">
+                                <Link to={`/profile/${user.id}`} className="flex items-center gap-3 shrink-0">
+                                    <img
+                                        src={user.avatar || 'https://res.cloudinary.com/dayoanitt/image/upload/v1774417116/davbhywnemftongrmdwx.jpg'}
+                                        alt={user.name}
+                                        className="h-10 w-10 rounded-full object-cover ring-1 ring-gray-100"
+                                    />
+                                    <div className="flex flex-col">
+                                        <span className="text-[14px] font-semibold text-gray-900 hover:text-[#2e62a0] hover:underline line-clamp-1">
+                                            {user.name}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                            {user.mutualFriends > 0 ? `${user.mutualFriends} bạn chung` : 'Gợi ý cho bạn'}
+                                        </span>
                                     </div>
-                                    <button
-                                        onClick={() => !sent && handleSendRequest(user.id, user.name)}
-                                        disabled={sent}
-                                        className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                                            sent
-                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                : 'bg-[#2e62a0]/10 text-[#2e62a0] hover:bg-[#2e62a0]/20'
-                                        }`}
-                                    >
-                                        {sent
-                                            ? <><Check size={13} /> Đã gửi</>
-                                            : <><UserPlus size={13} /> Thêm</>
-                                        }
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+                                </Link>
 
-            {/* ĐANG ONLINE */}
-            <div className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100">
-                <h3 className="mb-4 text-sm font-semibold text-gray-700">Đang hoạt động</h3>
-                <div className="flex flex-col gap-3">
-                    {MOCK_ONLINE.map((user) => (
-                        <div key={user.id}
-                             className="flex cursor-pointer items-center gap-3 rounded-xl p-2 transition hover:bg-gray-50">
-                            <div className="relative">
-                                <img src={user.avatar} alt={user.name}
-                                     className="h-9 w-9 rounded-full object-cover" />
-                                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-[#71bc59] ring-2 ring-white" />
+                                <button
+                                    onClick={() => handleSendRequest(user.id)}
+                                    disabled={isRequested}
+                                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
+                                        isRequested
+                                            ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                            : 'bg-[#2e62a0]/10 text-[#2e62a0] hover:bg-[#2e62a0] hover:text-white'
+                                    }`}
+                                    title={isRequested ? "Đã gửi lời mời" : "Thêm bạn bè"}
+                                >
+                                    {isRequested ? <UserCheck size={16} /> : <UserPlus size={16} />}
+                                </button>
                             </div>
-                            <p className="text-sm font-medium text-gray-700">{user.name}</p>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
+
+                <button className="mt-5 w-full rounded-xl py-2.5 text-sm font-medium text-[#2e62a0] hover:bg-[#2e62a0]/5 transition">
+                    Xem tất cả
+                </button>
             </div>
-        </aside>
+        </div>
     );
 }

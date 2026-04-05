@@ -1,6 +1,8 @@
 import {useRef, useState} from "react";
 import {Image as ImageIcon, Loader2, Video as VideoIcon} from "lucide-react";
-import axios from 'axios';
+
+import axiosClient from "../../../api/axiosClient.ts";
+import axios from "axios";
 
 interface Props {
     onUploadSuccess: (url: string, fileType: 'image' | 'video') => void;
@@ -16,15 +18,34 @@ export default function CustomDirectUpload({ onUploadSuccess }: Props) {
 
         setIsUploading(true);
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', import.meta.env.VITE_CLOUD_UPLOAD_PRESET);
-
         try {
+            const paramsToSign = {
+                folder: "connecthub"
+            };
+
+            // Dùng axiosClient nội bộ để gọi BE của bạn (cần JWT token)
+            const signRes = await axiosClient.post("/api/cloudinary/signature", paramsToSign);
+
+            // Xóa đi .data vì Axios trả về response nằm trong .data.data (tùy cấu trúc BE của bạn)
+            // NẾU BE BẠN BỌC ApiResponse THÌ PHẢI LÀ signRes.data.data.signature
+            // Ở đây mình theo sát code Controller bạn vừa gửi (ResponseEntity.ok):
+            const signature = signRes.data.signature;
+            const timestamp = signRes.data.timestamp; // Lúc này nó sẽ nhận được giá trị thực, không phải "undefined" nữa
+            const apiKey = signRes.data.apiKey || import.meta.env.VITE_CLOUD_API_KEY;
+            const cloudName = signRes.data.cloudName || import.meta.env.VITE_CLOUD_NAME;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('api_key', apiKey);
+            formData.append('timestamp', timestamp);
+            formData.append('signature', signature);
+            formData.append('folder', "connecthub");
+
             const resourceType = file.type.startsWith('video/') ? 'video' : 'image';
-            // Gọi thẳng API Cloudinary không qua Widget
+
+            // QUAN TRỌNG: DÙNG AXIOS GỐC ĐỂ GỌI CLOUDINARY (để không bị dính Bearer Token làm lỗi CORS)
             const response = await axios.post(
-                `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUD_NAME}/${resourceType}/upload`,
+                `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
                 formData
             );
 

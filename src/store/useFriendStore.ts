@@ -2,40 +2,55 @@ import {friendApi, type UserSuggestion} from "../api/friendApi.ts";
 import {create} from "zustand";
 
 interface FriendStore {
-    suggestions: UserSuggestion[];
-    sentIds: Set<number>;   // ID đã gửi request
+    friends: any[];
     isLoading: boolean;
-
-    fetchSuggestions: () => Promise<void>;
-    sendRequest: (userId: number) => Promise<void>;
+    isFetchingMore: boolean;
+    nextCursor: string | null;
+    hasNext: boolean;
+    fetchFriends: () => Promise<void>;
+    fetchMoreFriends: () => Promise<void>;
+    removeFriendFromList: (friendId: string) => void;
 }
 
-export const useFriendStore = create<FriendStore>((set) => ({
-    suggestions: [],
-    sentIds: new Set(),
+export const useFriendStore = create<FriendStore>((set, get) => ({
+    friends: [],
     isLoading: false,
+    isFetchingMore: false,
+    nextCursor: null,
+    hasNext: true,
 
-    fetchSuggestions: async () => {
+    fetchFriends: async () => {
         set({ isLoading: true });
         try {
-            const resp = await friendApi.getSuggestions();
-            set({ suggestions: resp.data.data });
-        } catch (_) {}
-        finally { set({ isLoading: false }); }
+            const res = await friendApi.getFriends();
+            set({
+                friends: res.data.data.data,
+                nextCursor: res.data.data.nextCursor,
+                hasNext: res.data.data.hasNext,
+                isLoading: false
+            });
+        } catch (error) { set({ isLoading: false }); }
     },
 
-    sendRequest: async (userId) => {
-        // Optimistic: đánh dấu đã gửi ngay
-        set((s) => ({ sentIds: new Set([...s.sentIds, userId]) }));
+    fetchMoreFriends: async () => {
+        const { isFetchingMore, hasNext, nextCursor, friends } = get();
+        if (isFetchingMore || !hasNext || !nextCursor) return;
+
+        set({ isFetchingMore: true });
         try {
-            await friendApi.sendRequest(userId);
-        } catch (_) {
-            // Rollback
-            set((s) => {
-                const next = new Set(s.sentIds);
-                next.delete(userId);
-                return { sentIds: next };
+            const res = await friendApi.getFriends(nextCursor);
+            set({
+                friends: [...friends, ...res.data.data.data],
+                nextCursor: res.data.data.nextCursor,
+                hasNext: res.data.data.hasNext,
+                isFetchingMore: false
             });
-        }
+        } catch (error) { set({ isFetchingMore: false }); }
     },
+
+    removeFriendFromList: (friendId) => {
+        set((state) => ({
+            friends: state.friends.filter((f) => f.id !== friendId)
+        }));
+    }
 }));

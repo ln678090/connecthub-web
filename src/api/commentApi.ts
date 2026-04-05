@@ -21,15 +21,34 @@ export interface CommentRequest{
     content:string;
     parentId:string;
 }
+
+export interface CursorPageResponse<T> {
+    data: T[];
+    nextCursor: string | null;
+    hasNext: boolean;
+}
 const commentApi={
-    // Lấy bình luận gốc của bài viết
-    getTopLevelComments: (postId: string, page = 0, size = 5) =>
-        axiosClient.get(`/api/posts/${postId}/comments?page=${page}&size=${size}`),
+    getTopLevelComments: (postId: string, cursor: string | null = null, limit = 5) => {
+        const params = new URLSearchParams();
+        params.append("limit", limit.toString());
+        if (cursor) params.append("cursor", cursor);
+        return axiosClient.get<{ message: string, data: CursorPageResponse<CommentResponse> }>(
+            `/api/posts/${postId}/comments?${params.toString()}`
+        );
+    },
 
-    // Lấy các câu trả lời (replies) của một bình luận
-    getReplies: (parentId: string, page = 0, size = 5) =>
-        axiosClient.get(`/api/posts/comments/${parentId}/replies?page=${page}&size=${size}`),
-
+    // SỬA: Lấy các câu trả lời (replies) dùng Cursor
+    getReplies: (parentId: string, cursor: string | null = null, limit = 5) => {
+        const params = new URLSearchParams();
+        params.append("limit", limit.toString());
+        if (cursor) params.append("cursor", cursor);
+        return axiosClient.get<{ message: string, data: CursorPageResponse<CommentResponse> }>(
+            `/api/posts/comments/${parentId}/replies?${params.toString()}`
+        );
+    },
+    getCommentById: (commentId: string) => {
+        return axiosClient.get(`/api/posts/comments/${commentId}/detail`);
+    },
     // Tạo bình luận mới (gốc hoặc trả lời)
     createComment: (postId: string, data: CommentRequest) =>
         axiosClient.post(`/api/posts/${postId}/comments`, data),

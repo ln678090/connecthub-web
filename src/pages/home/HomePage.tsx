@@ -7,7 +7,7 @@ import CreatePost from './components/CreatePost';
 import RightSidebar from './components/RightSidebar';
 import {usePostStore} from '../../store/usePostStore';
 
-// Skeleton UI giữ nguyên...
+
 function PostSkeleton() {
     return (
         <div className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100 animate-pulse">
@@ -37,6 +37,8 @@ export default function HomePage() {
     const loadMore = usePostStore(s => s.loadMore);
 
     const sentinelRef = useRef<HTMLDivElement>(null);
+    const toggleLike = usePostStore(s => s.toggleLike);
+    const deletePost = usePostStore(s => s.deletePost);
 
     useEffect(() => {
         fetchPosts();
@@ -63,7 +65,7 @@ export default function HomePage() {
 
             <main className="flex-1 px-4 py-6 md:px-6 lg:px-10">
                 <div className="mx-auto max-w-[680px] flex flex-col gap-5">
-                    <StoryBar />
+                    {/*<StoryBar />*/}
 
                     {/* Component nhập liệu nằm cố định ở đây */}
                     <CreatePost />
@@ -71,9 +73,15 @@ export default function HomePage() {
                     {isLoading ? (
                         [1, 2, 3].map((i) => <PostSkeleton key={i} />)
                     ) : (
-                        posts.map((post,index) => <PostCard key={`${post.id}-${index}`} postData={post} />)
+                        posts.map((post, index) => (
+                            <PostCard
+                                key={`${post.id}-${index}`}
+                                postData={post}
+                                onLike={toggleLike}
+                                onDelete={deletePost}
+                            />
+                        ))
                     )}
-
                     <div ref={sentinelRef} className="h-4"></div>
 
                     {isLoadingMore && (

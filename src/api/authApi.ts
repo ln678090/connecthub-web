@@ -46,7 +46,5 @@ export const authApi = {
         return authClient.post('/api/auth/logout');
     },
 
-    getMe: () => {
-        return authClient.get('/api/auth/me');
-    },
+
 };
