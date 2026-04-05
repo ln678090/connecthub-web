@@ -2,7 +2,7 @@ import {useEffect, useRef} from 'react';
 import {Loader2} from 'lucide-react';
 import PostCard from './components/PostCard';
 import LeftSidebar from './components/LeftSidebar';
-import StoryBar from './components/StoryBar';
+// import StoryBar from './components/StoryBar';
 import CreatePost from './components/CreatePost';
 import RightSidebar from './components/RightSidebar';
 import {usePostStore} from '../../store/usePostStore';

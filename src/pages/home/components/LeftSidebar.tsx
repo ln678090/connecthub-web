@@ -1,4 +1,4 @@
-import { Bell, Home, LogOut, MessageCircle, Settings, User, Users } from "lucide-react";
+import {  Home, LogOut, MessageCircle, Settings, User, Users } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../../store/useAuthStore.ts";
 import { authApi } from "../../../api/authApi.ts";

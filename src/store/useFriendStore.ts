@@ -1,4 +1,4 @@
-import {friendApi, type UserSuggestion} from "../api/friendApi.ts";
+import {friendApi} from "../api/friendApi.ts";
 import {create} from "zustand";
 
 interface FriendStore {

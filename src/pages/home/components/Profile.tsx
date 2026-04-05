@@ -7,7 +7,7 @@ import {useAuthStore} from "../../../store/useAuthStore.ts";
 import {Camera, Download, Loader2, X} from "lucide-react";
 import {usePostStore} from "../../../store/usePostStore.ts";
 import PostCard from "./PostCard.tsx";
-import {useToastStore} from "../../../store/useToastStore.ts";
+// import {useToastStore} from "../../../store/useToastStore.ts";
 import {friendApi} from "../../../api/friendApi.ts";
 
 function PostSkeleton() {
@@ -37,9 +37,9 @@ export default function Profile() {
     const [isLoading, setIsLoading] = useState(true);
     const userId = urlUserId || currentUser?.id;
     const isOwnProfile = currentUser?.id === userId;
-    const showToast = useToastStore((s) => s.show);
-
-    const [requestStatus, setRequestStatus] = useState<'NONE' | 'PENDING' | 'ACCEPTED'>('NONE');
+    // const showToast = useToastStore((s) => s.show);
+    //
+    // const [requestStatus, setRequestStatus] = useState<'NONE' | 'PENDING' | 'ACCEPTED'>('NONE');
 
     const handleSendFriendRequest = async () => {
         if (!userId) return;
@@ -190,15 +190,15 @@ export default function Profile() {
     };
 
 
-    const handleOpenEditModal = () => {
-        setEditForm({
-            fullName: profile.fullName || "",
-            bio: profile.bio || "",
-            location: profile.location || "",
-            websiteUrl: profile.websiteUrl || ""
-        });
-        setIsEditModalOpen(true);
-    };
+    // const handleOpenEditModal = () => {
+    //     setEditForm({
+    //         fullName: profile.fullName || "",
+    //         bio: profile.bio || "",
+    //         location: profile.location || "",
+    //         websiteUrl: profile.websiteUrl || ""
+    //     });
+    //     setIsEditModalOpen(true);
+    // };
 
     const handleSaveProfile = async () => {
         setIsSaving(true);
