@@ -11,7 +11,7 @@ type LeftSidebarProps = {};
 const navItemsTop = [
     { icon: Home,          label: 'Trang chủ',  path: '/' },
     { icon: Users,         label: 'Bạn bè',     path: '/friends' },
-    { icon: MessageCircle, label: 'Tin nhắn',   path: 'https://chat-real-time-7qoyl3xqt-ln678090s-projects.vercel.app/' },
+    { icon: MessageCircle, label: 'Tin nhắn',   path: 'https://chat-real-time-o3advyczi-ln678090s-projects.vercel.app/' },
 ];
 
 const navItemsBottom = [
